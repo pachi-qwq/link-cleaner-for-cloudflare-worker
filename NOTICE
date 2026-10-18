@@ -1,3 +1,34 @@
+link-cleaner-for-cloudflare-worker — third-party notice
+
+======================================================================
+English
+======================================================================
+
+The source code of this project is released under the MIT license (see LICENSE).
+
+Part of the tracking-parameter cleaning RULES -- the `CLEARURLS_PROVIDERS` constant in index.js
+(the `urlPattern` / `rules` / `exceptions` of 27 sites) -- is taken from ClearURLs Rules:
+
+    https://github.com/ClearURLs/Rules
+    Copyright (c) ClearURLs contributors
+    Licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
+    https://github.com/ClearURLs/Rules/blob/master/LICENSE
+
+That data block is used and distributed under LGPL-3.0 and is NOT covered by this project's MIT
+license. No ClearURLs source code is used here -- only its rules data (JSON snapshot, 2026-10-18).
+
+In addition, a set of global click/ad tracking key names in `TRACKING_EXACT` (`gclid`, `fbclid`,
+`msclkid` and friends) is likewise derived from that project's `globalRules` list, under the same
+license.
+
+To remove the data entirely: delete the `CLEARURLS_PROVIDERS` constant and `compileClearUrls()`,
+drop the reference to them in `stripByProviderRules()`, and point the unmatched branch of `cleanOne`
+back at `stripTracking(url)`. The project then keeps only its hand-written tracking deny-list.
+
+======================================================================
+简体中文
+======================================================================
+
 本项目的源代码以 MIT 许可发布（见 LICENSE）。
 
 本项目的追踪参数清洗规则中，有一部分**数据**（index.js 里的 `CLEARURLS_PROVIDERS` 常量：

@@ -1,104 +1,127 @@
-# 更新日志
+# Changelog
 
-本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与
-[语义化版本](https://semver.org/lang/zh-CN/)。
+[简体中文](CHANGELOG.zh-CN.md) | **English**
+
+All notable changes to this project. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
+[Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-（无）
+(Nothing yet)
 
 ## [0.3.0] - 2026-10-18
 
-### 新增
+### Added
 
-- **内联 27 个高频站点的追踪参数规则**（ClearURLs Rules 精选：微博 / 搜狐 / 优酷 / TikTok /
-  YouTube / X / Reddit / Amazon / eBay / Google 等）。命中 provider 时按它的 `rules` 删参数，
-  并**叠加**本项目自己的追踪键黑名单；未命中 provider 仍走原黑名单。数据取自上游 JSON 快照
-  （2026-10-18），按 LGPL-3.0 使用，见新增的 `NOTICE`。单文件 325 → 567 行，
-  打包体积 9.2 → 19.5 KiB（gzip 3.1 → 6.0）。
-- **`/clean?url=` 单链接 JSON 接口**：返回 `input` / `output` / `host` / `rule` / `changed`，
-  缺参、非法 URL、非 http(s) 分别返回 400 并带 `error` 码。与文本接口共用 `cleanOne`，
-  并有专门用例保证「两条接口对同一链接输出一致」。实现上把 `readTarget` 泛化成 `readParam`。
+- **Inlined tracking rules for 27 high-traffic sites** (curated from ClearURLs Rules: Weibo, Sohu,
+  Youku, TikTok, YouTube, X, Reddit, Amazon, eBay, Google and more). When a provider matches, its
+  `rules` delete parameters and our own tracking deny-list is **applied on top**; sites without a
+  provider still use the deny-list. Data taken from an upstream JSON snapshot (2026-10-18) and used
+  under LGPL-3.0 — see the new `NOTICE`. The single file grew 325 → 567 lines, the bundle
+  9.2 → 19.5 KiB (gzip 3.1 → 6.0).
+- **`/clean?url=` single-link JSON endpoint**: returns `input` / `output` / `host` / `rule` /
+  `changed`; missing param, malformed URL and non-http(s) each return 400 with an `error` code. It
+  shares `cleanOne` with the text endpoint, and a dedicated test asserts both endpoints agree on the
+  same link. `readTarget` was generalised into `readParam`.
 
-### 修复
+### Fixed
 
-- **provider 例外吞掉了通用黑名单**：命中 ClearURLs 某 provider 的 `exceptions` 时直接返回原文，
-  连 `utm_*` / `gclid` 都没删。改为「例外只豁免该 provider 的规则，通用黑名单照常生效」，
-  与 ClearURLs 的 `globalRules` 语义对齐。
-- **缺一批全局点击 ID**：`TRACKING_EXACT` 里没有 `gclid` / `fbclid` / `msclkid` / `yclid` /
-  `igshid` 等最常见的广告追踪键，导致任意站点上的这些参数都活下来了。已按 ClearURLs 的
-  `globalRules` 补 40 余个键名。
-- **`completeProvider` 是死分支**：精选的 27 个 provider 里一个都不用该字段，运行时代码已删除，
-  数据块注释里说明原因。
-- **没有链接的文本被吞成空 body**：`process` 在文本里找不到链接时返回空串，用户粘一段纯文字
-  会拿回 `200 ""`。改为原样返回文本。
-- **抖音主页链接被伪造成视频地址**：解析兜底用 `/(\d{6,})/` 抓任意数字段，`v.douyin.com`
-  跳转到 `/share/user/<uid>/` 时会生成一个 404 的 `www.douyin.com/video/<uid>`；改为先校验
-  最终地址属于抖音域名，且路径必须匹配 `/(share/)?video/<id>`。
+- **Provider exceptions swallowed the generic deny-list**: hitting a ClearURLs provider's
+  `exceptions` returned the input untouched, so `utm_*` / `gclid` survived. Exceptions now only
+  exempt that provider's rules while the generic deny-list still applies — matching ClearURLs'
+  `globalRules` semantics.
+- **Missing global click IDs**: `TRACKING_EXACT` had no `gclid` / `fbclid` / `msclkid` / `yclid` /
+  `igshid`, so the most common ad trackers survived on every site. 40+ key names added from
+  ClearURLs' `globalRules`.
+- **`completeProvider` was dead code**: none of the 27 curated providers uses that flag; the runtime
+  branch was removed and the reason documented in the data-block comment.
+- **Text without links was swallowed into an empty body**: `process` returned `''` when a text had
+  no links, so pasting plain prose yielded `200 ""`. It now returns the text unchanged.
+- **Douyin profile links were turned into fake video URLs**: the fallback grabbed any numeric path
+  segment, so a `v.douyin.com` redirect to `/share/user/<uid>/` produced a 404
+  `www.douyin.com/video/<uid>`. The final URL must now be a Douyin host whose path matches
+  `/(share/)?video/<id>`.
 
-### 变更
+### Changed
 
-- 响应头加 `x-content-type-options: nosniff`（`/clean` 会把用户输入原样放进 JSON）。
-- 日志不再打印完整 URL，只打印 host（`probe failed` 那一条）——这是隐私工具，日志里不该留
-  用户链接。
+- Added `x-content-type-options: nosniff` (`/clean` reflects user input into JSON).
+- Logs no longer print full URLs, only the host (`probe failed`) — this is a privacy tool; user
+  links have no business in logs.
 
-### 测试
+### Tests
 
-- 测试拆成两层：`test/unit/`（纯函数边界）与 `test/integration/`（入口契约），当前共 107 条
-  （65 + 42）。为此在 `index.js` 末尾加了只给测试用的命名导出；Worker 只认 `default` 导出。
-- `parseUrls` 改用 `matchAll`，不再依赖模块级 `/g` 正则的 `lastIndex` 状态。
-- 新增 `npm run test:unit` / `test:integration` / `test:coverage`（Node 内置覆盖率，零依赖）。
-- 测试公共件与真实分享文本样例抽到 `test-support/`（该目录不会被 test runner 当作用例）。
-
+- Tests split into two layers: `test/unit/` (pure-function boundaries) and `test/integration/`
+  (entry contract), 107 cases total (65 + 42). This is enabled by a group of named exports at the
+  end of `index.js`; Workers only use the `default` export.
+- `parseUrls` now uses `matchAll` and no longer depends on a module-level `/g` regex's `lastIndex`.
+- New scripts: `npm run test:unit` / `test:integration` / `test:coverage` (Node's built-in coverage,
+  zero dependencies).
+- Shared helpers and real share-text fixtures moved to `test-support/`, so the test runner does not
+  treat them as test files.
 
 ## [0.2.0] - 2026-10-18
 
-### 修复
+### Fixed
 
-- **子域路由失效**：路由表原来是 `Map` 精确匹配完整 hostname，而真实分享链接几乎都在
-  `www.` / `item.` / `m.` / `v.` 子域上，导致除 `b23.tv` 与 `mobile.yangkeduo.com` 外的
-  站点处理器从未被触发。改为「相等或点边界后缀」匹配。
-- **京东链接 500**：`jdUri` 引用了不存在的变量 `uri`，任何 `jd.com` 链接都会抛
-  `ReferenceError`，整个请求变成 CF 1101。已修正，并让单条链接失败只降级自己。
-- **短链被清成空格**：小红书/抖音处理器读 `headers.get('Location')`，而 Worker 内跟随重定向后
-  该头恒为 `null`，`removeParams(null)` 返回空串，链接被替换成一个空格。改用 `response.url`。
-- **淘宝短链产生半截链接**：`taobaoCnUri` 用 `indexOf(" ")` 取 URL，而上游已按空白切分过，
-  恒为 `-1`，于是 `fetch("")` 并把 `item.taobao.com/item.htm?` 拼进正文。
-- **必需参数被丢弃**：`split('&')` + `startsWith('id')` 的位置敏感解析，使 `id` / `goods_id`
-  不在第一个 query 段时就丢失，并留下悬空 `?`。改用 `URLSearchParams` + 每站点白名单。
-- **带 `%` 的文案 500**：入口对整段输出做 `decodeURIComponent`，"全场 50% off" 这类文本会抛
-  `URIError`。改为在边界处容错解码一次（`safeDecode`）。
-- **百分号编码的入参静默失效**：`target` 从不解码，传入 `encodeURIComponent` 后的正常文本会
-  返回空 body。改为 `readTarget` 取原文 + `safeDecode` 解码。
-- **京东搜索页变死链**：`jd.com` 后缀一刀切导致 `search.jd.com/Search?keyword=键盘` 被清成
-  `/Search`。改为按 host 区分：商品页全删，其它子域只删追踪键。
+- **Subdomain routing was dead**: the router was a `Map` keyed on the exact hostname, while real
+  share links almost always live on `www.` / `item.` / `m.` / `v.` subdomains — so every site handler
+  except `b23.tv` and `mobile.yangkeduo.com` was never reached. Now matched by exact-or-dot-boundary
+  suffix.
+- **JD links returned 500**: `jdUri` referenced an undefined `uri`, so any `jd.com` link threw a
+  `ReferenceError` and the whole request became a CF 1101. Fixed, and a single failing link now only
+  degrades itself.
+- **Short links were replaced with a single space**: the Xiaohongshu/Douyin handlers read
+  `headers.get('Location')`, which is always `null` inside a Worker after following a redirect, so
+  `removeParams(null)` returned an empty string. Switched to `response.url`.
+- **Taobao short links produced half-links**: `taobaoCnUri` used `indexOf(" ")` on a value that had
+  already been split on whitespace, so it always got `-1`, called `fetch("")` and pasted
+  `item.taobao.com/item.htm?` into the text.
+- **Required parameters were dropped**: position-sensitive parsing (`split('&')` +
+  `startsWith('id')`) lost `id` / `goods_id` whenever they were not the first query segment, and left
+  a dangling `?`. Replaced with `URLSearchParams` plus per-site keep-lists.
+- **Text containing `%` returned 500**: the entry point ran `decodeURIComponent` over the whole
+  output, so "50% off" threw a `URIError`. Now decoded once at the boundary with a tolerant
+  `safeDecode`.
+- **Percent-encoded input silently produced an empty body**: `target` was never decoded, so properly
+  encoded text returned nothing. `readTarget` now takes the raw value and `safeDecode` decodes it.
+- **JD search pages became dead links**: the blanket `jd.com` suffix match reduced
+  `search.jd.com/Search?keyword=keyboard` to `/Search`. Now host-aware: product pages drop the whole
+  query, other subdomains only lose tracking keys.
 
-### 新增
+### Added
 
-- **未知站点通用清洗**：只删已知追踪键（`utm_*`、`spm`、`scm`、`share_*`、`_wv*` 等），
-  其余参数一律保留，避免把 `?v=` / `?q=` 类链接砍成死链。
-- **小红书 `xsec_token` 保留**：web 链接与短链两条路径都只保留该必需参数（借鉴上游 `ddb8d86`）。
-- **B站业务参数保留**：`?p=`（分P）、`?t=`（起播秒数）不再被删。
-- **明确的 HTTP 契约**：`200 / 400 / 405 / 500`、`OPTIONS` 204、`content-type`、
-  `access-control-allow-origin`、`cache-control: no-store`，入口整体 `try/catch`（不再出现 1101）。
-- **短链解析的可靠性**：`AbortSignal.timeout(8000)` 取代无效的 `timeout` init 键；
-  `HEAD` 被拒（403/405/501）时降级 `GET`。
-- **抗放大**：单次请求最多解析 20 条链接、并发 5（`FETCH_LIMITS`）。
+- **Generic cleaning for unknown sites**: only known tracking keys are removed
+  (`utm_*`, `spm`, `scm`, `share_*`, `_wv*` …), everything else is kept — avoiding dead
+  `?v=` / `?q=` links.
+- **Xiaohongshu `xsec_token` is preserved**: both the web link and the short-link path keep only that
+  required parameter (borrowed from upstream `ddb8d86`).
+- **Bilibili business parameters preserved**: `?p=` (part) and `?t=` (start seconds) are no longer
+  dropped.
+- **Explicit HTTP contract**: `200 / 400 / 405 / 500`, `OPTIONS` 204, `content-type`,
+  `access-control-allow-origin`, `cache-control: no-store`, and a top-level `try/catch` (no more
+  1101 pages).
+- **Reliable short-link resolution**: `AbortSignal.timeout(8000)` replaces the no-op `timeout` init
+  key; `HEAD` rejections (403/405/501) fall back to `GET`.
+- **Amplification control**: at most 20 links parsed per request, 5 concurrent (`FETCH_LIMITS`).
 
-### 工程化
+### Engineering
 
-- 新增 `package.json`（唯一 devDependency 为 wrangler）、`wrangler.toml`（`main = index.js`，
-  只打包不转换）、`.gitignore`。
-- 新增 `test/worker.test.mjs`：28 条用例，使用 Node 内置 `node:test`，零依赖，不需要网络。
-- 新增 MIT `LICENSE`，保留上游 `hellodk34/link-cleaner` 的版权声明（本仓库是其衍生作品）。
-- `index.js` 内部改为 5 个固定分节（CONFIG / UTILS / HANDLERS / ROUTER / ENTRY），
-  保持单文件、无 import、无构建步骤。
-- README 补齐接口契约、支持站点、实现说明、运行时注意事项；新增英文版 `README.en.md`。
+- Added `package.json` (wrangler as the only devDependency), `wrangler.toml`
+  (`main = index.js`, bundling only), `.gitignore`.
+- Added `test/worker.test.mjs`: 28 cases using Node's built-in `node:test`, no dependencies, no
+  network.
+- Added an MIT `LICENSE`, retaining the upstream `hellodk34/link-cleaner` copyright notice (this
+  repository is a derivative work).
+- `index.js` reorganised into five fixed sections (CONFIG / UTILS / HANDLERS / ROUTER / ENTRY),
+  still a single file with no imports and no build step.
+- README grew a full API contract, supported-site table, implementation notes and runtime caveats;
+  a Chinese version was added.
 
 ## [0.1.0] - 2024-03-02
 
-### 初始版本
+### Initial release
 
-- 由 [hellodk34/link-cleaner](https://github.com/hellodk34/link-cleaner)（Java）移植而来的
-  Cloudflare Worker 雏形：`?target=` 入口、按域名查表的 pdd / 淘宝 / 京东 / B站 / 抖音 /
-  小红书处理逻辑。
+- Cloudflare Worker port of [hellodk34/link-cleaner](https://github.com/hellodk34/link-cleaner)
+  (Java): `?target=` entry point and domain-table dispatch for Pinduoduo, Taobao, JD, Bilibili,
+  Douyin and Xiaohongshu.

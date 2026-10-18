@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "URL 清洗 Worker：输入分享文本，输出去掉追踪参数的链接",
+  "description": "Cloudflare Worker that strips tracking parameters from shared links",
   "license": "MIT",
   "scripts": {
     "dev": "wrangler dev",

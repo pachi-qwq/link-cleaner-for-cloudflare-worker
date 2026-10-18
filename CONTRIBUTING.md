@@ -1,86 +1,98 @@
-# 贡献指南
+# Contributing
 
-感谢你愿意花时间改进这个项目。它很小，规则也很少，但有几条是硬的。
+[简体中文](CONTRIBUTING.zh-CN.md) | **English**
 
-## 硬规则
+Thanks for taking the time to improve this project. It is small and the rules are few, but a couple
+of them are hard requirements.
 
-1. **`index.js` 是唯一源码，也是唯一部署产物。** 不允许 `import` / `require`、不允许拆成
-   `src/*.js`、不允许引入 TypeScript 或 bundler。目标是可以整段粘进 Cloudflare Dashboard
-   的在线编辑器并直接运行。
-2. **零运行时依赖。** `dependencies` 必须为空；`devDependencies` 只放 wrangler。
-3. **测试零依赖。** 只用 Node 内置的 `node:test` + `node:assert/strict`。不引入 vitest/jest/mocha。
-4. **改行为必须带用例。** 不改行为的地方不要顺手重构——评审会按这条打回。
+## Hard rules
 
-## 单文件内部结构
+1. **`index.js` is the only source file and the only deployable artifact.** No `import` / `require`,
+   no splitting into `src/*.js`, no TypeScript, no bundler. The goal is that the whole file can be
+   pasted into the Cloudflare dashboard editor and run as-is.
+2. **Zero runtime dependencies.** `dependencies` must stay empty; `devDependencies` contains only
+   wrangler.
+3. **Zero test dependencies.** Node's built-in `node:test` + `node:assert/strict` only — no
+   vitest/jest/mocha.
+4. **Behaviour changes need tests.** Do not refactor unrelated code in the same change; reviews will
+   reject it.
 
-`index.js` 用 5 个分节注释分区，新增代码只能落进对应分区：
+## Internal structure of the single file
+
+`index.js` is partitioned by five section comments. New code goes into the matching section:
 
 ```
-// ========== 1. CONFIG：常量、站点规则表、限额 ==========
-// ========== 2. UTILS：纯函数工具 ==========
-// ========== 3. HANDLERS：单站点处理 ==========
-// ========== 4. ROUTER：host → handler ==========
-// ========== 5. ENTRY：export default { fetch } ==========
+// ========== 1. CONFIG: constants, site rules, limits ==========
+// ========== 2. UTILS: pure helpers ==========
+// ========== 3. HANDLERS: per-site processing ==========
+// ========== 4. ROUTER: host → handler ==========
+// ========== 5. ENTRY: export default { fetch } ==========
 ```
 
-## 新增一个站点
+## Adding a site
 
-四处都要改，缺一不算完成：
+Four places must change; a partial change is not done:
 
 1. `index.js`
-   - 在 `// ========== 3. HANDLERS ==========` 里加一个 `xxxUri = async (url) => …`；
-   - 需要保留某些参数时，在 CONFIG 的 `KEEP_PARAMS` 里加 `'example.com': ['id']`；
-   - 在 `// ========== 4. ROUTER ==========` 的 `SITE_RULES` 里加一行 `{domain, handler}`。
-2. `test/worker.test.mjs` 加一条端到端用例（真实分享文本形态，带标题/中文标点的那种）。
-3. `README.md` 与 `README.en.md` 的「支持的站点」表格各加一行。
-4. `CHANGELOG.md` 的 `[Unreleased]` 里加一条。
+   - add an `xxxUri = async (url) => …` in section 3 (HANDLERS);
+   - to keep specific params, add `'example.com': ['id']` to `KEEP_PARAMS` in CONFIG;
+   - add a `{domain, handler}` row to `SITE_RULES` in section 4 (ROUTER).
+2. `test/integration/worker.test.mjs`: one end-to-end case using a real share-text shape (title,
+   CJK punctuation, trailing text).
+3. `README.md` and `README.zh-CN.md`: one row each in the "Supported sites" table.
+4. `CHANGELOG.md` (and `CHANGELOG.zh-CN.md`): an entry under `[Unreleased]`.
 
-域名匹配一律用「相等或点边界后缀」：`host === domain || host.endsWith('.' + domain)`。
-不要把点去掉——`endsWith('bilibili.com')` 会让 `evil-bilibili.com` 命中，这是安全边界。
+Host matching always uses exact-or-dot-boundary suffix: `host === domain || host.endsWith('.' + domain)`.
+Never drop the dot — `endsWith('bilibili.com')` would match `evil-bilibili.com`, which is a security
+boundary, not a style choice.
 
-## 开发流程
+## Development workflow
 
 ```bash
 npm install
 npm run dev      # http://localhost:8787/?target=...
-npm test         # 107 条全绿才能提交
-npm run check    # 打包校验（wrangler dry-run）
+npm test         # all 107 must pass before committing
+npm run check    # bundle check (wrangler dry-run)
 ```
 
-- 行为改动先写用例（红），再改代码（绿）。
+- Write the test first (red), then the code (green).
 
-### 测试怎么组织
+### How the tests are organised
 
-| 目录 | 跑法 | 放什么 |
+| Directory | Command | Contents |
 |---|---|---|
-| `test/unit/` | `npm run test:unit` | 纯函数的边界（`stripQuery` 的 null/非法 URL/重复键、`readTarget` 的 `&`/`#`、`mapLimit` 的保序与并发） |
-| `test/integration/` | `npm run test:integration` | 走 `new Request(...)` 的完整契约，一条用例对应一条真实分享文本 |
-| `test-support/` | —— | `helpers.mjs`（`callWorker` / `callRaw` / `stubFetch`）与 `fixtures.mjs`；**不要**放进 `test/`，否则会被 test runner 当成用例执行 |
-| 全量 | `npm test` | 上面全部（107 条） |
-| 覆盖率 | `npm run test:coverage` | Node 内置覆盖率，零依赖 |
+| `test/unit/` | `npm run test:unit` | Pure-function boundaries (`stripQuery` with null/invalid URL/duplicate keys, `readTarget` with `&`/`#`, `mapLimit` ordering and concurrency) |
+| `test/integration/` | `npm run test:integration` | The full contract through `new Request(...)`; one case per real share text |
+| `test-support/` | — | `helpers.mjs` (`callWorker` / `callRaw` / `stubFetch`) and `fixtures.mjs`. **Do not** put these under `test/` — the test runner would execute them as test files |
+| Everything | `npm test` | All of the above (107) |
+| Coverage | `npm run test:coverage` | Node's built-in coverage, no dependencies |
 
-纯函数能单测是因为 `index.js` 末尾有一组**只给测试用的命名导出**：
+Pure functions are unit-testable because `index.js` ends with a group of **named exports used only by
+tests**:
 
 ```js
 export { parseUrls, stripQuery, stripTracking, isTrackingKey, keepForHost, hostOf,
-         safeDecode, readTarget, mapLimit, matchRule, cleanOne };
+         safeDecode, readParam, readTarget, mapLimit, matchRule, cleanOne,
+         compileClearUrls, stripByProviderRules };
 ```
 
-Worker 只认 `export default`，这些命名导出不影响部署。**加导出就要有用例**，否则删掉——它是测试面，
-不是公共 API。
+Workers only care about `export default`, so these do not affect the deployed artifact.
+**Every export needs a test**, otherwise remove it — this is a testing surface, not a public API.
 
-覆盖率基线（`npm run test:coverage`，2026-10-18）：`index.js` 行 93.8%、分支 87.4%、函数 100%。
-PR 不应显著降低；不设硬阈值。已知无法覆盖的分支：`probeFinalUrl` 的真实网络失败、
-`taobaoCnUri` 的落地页兜底、入口 500 兜底。
+Coverage baseline (`npm run test:coverage`, 2026-10-18): `index.js` 93.8% lines, 87.4% branches,
+100% functions. A PR should not lower it noticeably; there is no hard threshold. Known-unreachable
+branches: real network failures in `probeFinalUrl`, the landing-page fallback in `taobaoCnUri`, and
+the entry point's 500 catch-all.
 
-### 提交前自检
+### Pre-commit checklist
 
-- 需要验证真实边缘行为时用 `npx wrangler dev --local`，不要把"桩 fetch 通过"当成"线上可用"。
-- `grep -n "^import \|require(" index.js` 无命中；`npm test` 全绿。
+- Use `npx wrangler dev --local` when verifying real edge behaviour; "the stubbed fetch passes" is
+  not "it works in production".
+- `grep -n "^import \|require(" index.js` returns nothing; `npm test` is green.
 
-## 提交规范
+## Commit convention
 
-中文 + conventional 前缀：
+Chinese message + conventional prefix (this is the maintainer's convention; keep it consistent):
 
 ```
 fix: 京东只对商品页全删 query，搜索页 keyword 不再被砍成死链
@@ -90,26 +102,31 @@ docs: README 补英文版
 chore: 升级 wrangler
 ```
 
-一个提交只做一件事；不合并无关改动。
+One commit does one thing; do not bundle unrelated changes.
 
-## PR 检查清单
+## PR checklist
 
-- [ ] `node --test` 全绿，新增行为有用例
-- [ ] `index.js` 仍然没有 `import` / `require`，仍可整段粘贴运行
-- [ ] `npx wrangler deploy --dry-run` 通过，体积没有明显增长（当前约 19.5 KiB / gzip 6.0 KiB，含 7.3 KB 规则数据）
-- [ ] 域名规则用了点边界后缀匹配
-- [ ] 新增的 query 键放对了地方：业务参数进 `KEEP_PARAMS`，追踪参数进 `TRACKING_*`
-- [ ] README（中英）与 CHANGELOG 已同步
+- [ ] `npm test` is green and new behaviour has cases
+- [ ] `index.js` still has no `import` / `require` and is still paste-and-run
+- [ ] `npx wrangler deploy --dry-run` passes and the bundle has not grown noticeably
+      (currently ~19.5 KiB / 6.0 KiB gzipped, including 7.3 KB of rules data)
+- [ ] Host rules use dot-boundary suffix matching
+- [ ] New query keys went to the right place: business params → `KEEP_PARAMS`, tracking params →
+      `TRACKING_*`
+- [ ] README (both languages) and CHANGELOG are in sync
 
-## 评审时最该盯的三件事
+## Three things reviewers should look for
 
-1. **有没有为了"优雅"引入模块化或构建步骤**——这会破坏项目的核心约束。
-2. **有没有把"删掉整个 query"当成通用策略**——那会给 `?v=` / `?q=` 类链接造死链。
-3. **测试桩有没有把 bug 合法化**：`stubFetch` 里 `headers.get('Location')` 必须返回 `null`，
-   因为真实 Worker 跟随重定向后就是这个行为。改成返回真实 Location 等于在测试里假装
-   （已经修掉的）bug 不存在。
+1. **Any "elegance" that introduces modules or a build step** — it breaks the project's core
+   constraint.
+2. **"Drop the whole query" used as a generic strategy** — that turns `?v=` / `?q=` links into dead
+   links.
+3. **Tests that legitimise a bug**: in `stubFetch`, `headers.get('Location')` must return `null`,
+   because that is what a real Worker sees after following a redirect. Making it return a real
+   Location means pretending the (fixed) bug does not exist.
 
-## 许可
+## License
 
-提交即以 [MIT](LICENSE) 授权。本仓库衍生自
-[hellodk34/link-cleaner](https://github.com/hellodk34/link-cleaner)（MIT），保留其版权声明。
+By contributing you agree to license your work under [MIT](LICENSE). This repository is derived from
+[hellodk34/link-cleaner](https://github.com/hellodk34/link-cleaner) (MIT); its copyright notice is
+retained. Embedded rules data is LGPL-3.0 — see [NOTICE](NOTICE).
