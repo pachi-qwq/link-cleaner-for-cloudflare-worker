@@ -13,9 +13,19 @@
   `v.douyin.com` 跳转到 `/share/user/<uid>/` 时会生成一个 404 的 `www.douyin.com/video/<uid>`。
   改为先校验最终地址属于抖音域名，且路径必须匹配 `/(share/)?video/<id>`。
 
-### 计划中
+### 测试
 
-- 纯函数单测 + 入口集成测试双层拆分（计划 007）。
+- **测试拆成两层**：`test/unit/`（46 条，纯函数边界）与 `test/integration/`（32 条，入口契约），
+  共 78 条。为此在 `index.js` 末尾加了只给测试用的命名导出；Worker 只认 `default` 导出，
+  部署产物只增加约 0.2 KiB。
+- `parseUrls` 改用 `matchAll`，不再依赖模块级 `/g` 正则的 `lastIndex` 状态。
+- 新增 `npm run test:unit` / `test:integration` / `test:coverage`（Node 内置覆盖率，零依赖）。
+- 测试公共件与真实分享文本样例抽到 `test-support/`（该目录不会被 test runner 当作用例）。
+
+### 变更
+
+- 日志不再打印完整 URL，只打印 host（`probe failed` 那一条）——这是隐私工具，日志里不该留
+  用户链接。
 
 ## [0.2.0] - 2026-10-18
 

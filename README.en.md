@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Runtime](https://img.shields.io/badge/runtime-Cloudflare%20Workers-orange.svg)](https://workers.cloudflare.com/)
-[![Tests](https://img.shields.io/badge/tests-28%20passing-brightgreen.svg)](test/worker.test.mjs)
+[![Tests](https://img.shields.io/badge/tests-78%20passing-brightgreen.svg)](test/)
 [![Build](https://img.shields.io/badge/build-none-lightgrey.svg)](#single-file-constraint)
 
 A Cloudflare Worker that scrubs tracking parameters from shared links. Paste a share text, get the
@@ -204,19 +204,30 @@ These cost real debugging time during the port — recorded so nobody rediscover
 ## Testing
 
 ```bash
-npm test              # 28 cases
-npm run check         # wrangler bundle check
+npm test               # 78 (46 unit + 32 integration)
+npm run test:unit      # pure-function unit tests only
+npm run test:integration
+npm run test:coverage  # Node's built-in coverage (index.js: 91% lines / 86% branches / 100% funcs)
+npm run check          # wrangler bundle check
 ```
 
 All tests drive the real request contract (`new Request(...)`) with a stubbed `fetch` that models
 Worker redirect semantics (`.url` populated, `Location` null), so **no network access is required**.
 
-Coverage today: routing and dot boundaries, keep-list/deny-list behaviour, short-link expansion
-(including the `HEAD→GET` fallback), per-link failure isolation, concurrency and link-count limits,
-and the entry point's encoding, decoding, status codes and headers.
+Two layers:
 
-> Splitting this into pure-function unit tests plus entry-level integration tests is planned as
-> plan `007` (see the plan directory referenced in the Chinese README).
+| Layer | Location | What it covers | Count |
+|---|---|---|---|
+| Unit | `test/unit/` | Pure-function boundaries: `parseUrls` / `stripQuery` / `stripTracking` / `keepForHost` / `readTarget` / `safeDecode` / `mapLimit` / `matchRule` / `cleanOne` | 46 |
+| Integration | `test/integration/` | The full contract through `new Request(...)`: routing, short-link expansion (incl. the `HEAD→GET` fallback), failure isolation, limits, encoding/decoding, status codes, headers | 32 |
+
+To enable this, `index.js` ends with a group of **named exports** (`export { parseUrls, … }`) used only
+by tests. Workers only care about `export default`, so the named exports do not affect the deployed
+artifact — unit-testing pure functions without breaking the single-file constraint.
+
+Coverage is tracked, not enforced. `index.js` currently sits at 91.3% lines, 85.8% branches, 100%
+functions. Known-uncoverable branches: real network failures in `probeFinalUrl`, the landing-page
+fallback in `taobaoCnUri`, and the entry point's 500 catch-all.
 
 ## Project layout
 
@@ -224,7 +235,9 @@ and the entry point's encoding, decoding, status codes and headers.
 .
 ├── index.js            # the only source file and the only deployable artifact (325 lines, 5 sections)
 ├── test/
-│   └── worker.test.mjs # 28 cases
+│   ├── unit/           # pure-function unit tests (46)
+│   └── integration/    # entry-level integration tests (32)
+├── test-support/       # shared helpers and real share-text fixtures (not test files)
 ├── package.json        # wrangler as the only devDependency
 ├── wrangler.toml       # main = index.js, bundling only, no transforms
 ├── README.md           # Simplified Chinese (primary)
@@ -249,7 +262,7 @@ no build step**. Internally it is organised by five section comments:
 
 This is a deliberate trade-off: a longer file beats a build pipeline, because it must stay
 paste-and-run in the Cloudflare dashboard editor. `package.json` / `wrangler.toml` / `test/` are
-development-time assets that never reach the bundle (8.8 KiB total, 3.0 KiB gzipped).
+development-time assets that never reach the bundle (9.2 KiB total, 3.1 KiB gzipped).
 
 ## Known limitations
 
@@ -282,7 +295,7 @@ Two upstream changes were borrowed: `ddb8d86` (Xiaohongshu `xsec_token`) and `51
 - [x] Per-site keep-lists and a generic tracking deny-list
 - [x] Short-link expansion (`resp.url` + `HEAD→GET` fallback), timeouts, concurrency caps
 - [x] HTTP status codes and response headers
-- [ ] Pure-function unit tests alongside integration tests (plan 007)
+- [x] Pure-function unit tests alongside integration tests (named exports + `test-support/`)
 - [ ] Optional: adopt the [ClearURLs Rules](https://github.com/ClearURLs/Rules) ruleset (~40k rules)
 - [ ] Optional: `/clean?url=` JSON endpoint for scripting
 

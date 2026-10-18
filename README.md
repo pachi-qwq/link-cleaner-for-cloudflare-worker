@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Runtime](https://img.shields.io/badge/runtime-Cloudflare%20Workers-orange.svg)](https://workers.cloudflare.com/)
-[![Tests](https://img.shields.io/badge/tests-28%20passing-brightgreen.svg)](test/worker.test.mjs)
+[![Tests](https://img.shields.io/badge/tests-78%20passing-brightgreen.svg)](test/)
 [![Build](https://img.shields.io/badge/build-none-lightgrey.svg)](#单文件约束)
 
 把带追踪参数的分享链接清洗成干净链接的 Cloudflare Worker。粘贴一段分享文本，拿回同样的文本——
@@ -193,18 +193,28 @@ curl "https://link-cleaner.<你的子域>.workers.dev/?target=https://item.jd.co
 ## 测试
 
 ```bash
-npm test              # 28 条用例
-npm run check         # wrangler 打包校验
+npm test               # 78 条（纯函数单测 46 + 入口集成 32）
+npm run test:unit      # 只跑纯函数单测
+npm run test:integration
+npm run test:coverage  # Node 内置覆盖率（当前 index.js 行 91% / 分支 86% / 函数 100%）
+npm run check          # wrangler 打包校验
 ```
 
 测试全部走真实入参契约（`new Request(...)`），用桩 `fetch` 模拟 Worker 的重定向语义
 （`.url` 有值、`Location` 为 null），因此**不需要网络**。
 
-当前 28 条用例覆盖：路由与点边界、参数白名单/黑名单、短链展开（含 `HEAD→GET` 降级）、
-单条失败降级、并发与条数上限、入口编码/解码/错误码/响应头。
+两层结构：
 
-> 拆分为「纯函数单测 + 入口集成测试」两层的工作在计划 `007`，
-> 见 `D:\tmp\docs\link-cleaner-for-cloudflare-worker-plans\007-unit-tests.md`。
+| 层 | 位置 | 测什么 | 数量 |
+|---|---|---|---|
+| 单测 | `test/unit/` | 纯函数边界：`parseUrls` / `stripQuery` / `stripTracking` / `keepForHost` / `readTarget` / `safeDecode` / `mapLimit` / `matchRule` / `cleanOne` | 46 |
+| 集成 | `test/integration/` | 走 `new Request(...)` 的完整契约：路由命中、短链展开（含 `HEAD→GET` 降级）、失败降级、并发与条数上限、编码/解码/错误码/响应头 | 32 |
+
+为此 `index.js` 末尾有一组**命名导出**（`export { parseUrls, … }`），只给测试用；Worker 只认
+`export default`，命名导出不影响部署产物。纯函数能单测，同时不违反单文件约束。
+
+覆盖率不设硬阈值，只做趋势观察。当前 `index.js`：行 91.3%、分支 85.8%、函数 100%。
+已知无法覆盖的分支：`probeFinalUrl` 的真实网络失败、`taobaoCnUri` 的落地页兜底、入口的 500 兜底。
 
 ## 项目结构
 
@@ -212,7 +222,9 @@ npm run check         # wrangler 打包校验
 .
 ├── index.js            # 唯一源码 + 唯一部署产物（325 行，5 个分节）
 ├── test/
-│   └── worker.test.mjs # 28 条用例
+│   ├── unit/           # 纯函数单测（46 条）
+│   └── integration/    # 入口集成测试（32 条）
+├── test-support/       # 测试公共件与真实分享文本样例（不是测试文件）
 ├── package.json        # 只依赖 wrangler（devDependency）
 ├── wrangler.toml       # main = index.js，只打包不转换
 ├── README.md           # 本文（简体中文）
@@ -237,7 +249,7 @@ npm run check         # wrangler 打包校验
 
 这是刻意的取舍：宁可让文件长一点，也不要为了"分层"引入打包步骤——它需要能在 Cloudflare
 在线编辑器里整段粘贴就能跑。`package.json` / `wrangler.toml` / `test/` 都是开发期资产，
-不进部署产物（打包体积 8.9 KiB / gzip 3.0 KiB）。
+不进部署产物（打包体积 9.2 KiB / gzip 3.1 KiB）。
 
 ## 已知限制与取舍
 
@@ -267,7 +279,7 @@ npm run check         # wrangler 打包校验
 - [x] 站点级参数白名单与通用追踪键黑名单
 - [x] 短链展开（`resp.url` + `HEAD→GET` 降级）、超时、并发上限
 - [x] HTTP 错误码与响应头
-- [ ] 纯函数单测 + 集成测试双层（计划 007）
+- [x] 纯函数单测 + 集成测试双层（命名导出 + `test-support/`）
 - [ ] 可选：接 [ClearURLs Rules](https://github.com/ClearURLs/Rules) 的规则表（4 万条）
 - [ ] 可选：`/clean?url=` 单链接 JSON 接口（给脚本用）
 

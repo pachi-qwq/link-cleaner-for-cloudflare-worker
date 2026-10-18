@@ -43,13 +43,40 @@
 ```bash
 npm install
 npm run dev      # http://localhost:8787/?target=...
-npm test         # 全绿才能提交
+npm test         # 78 条全绿才能提交
 npm run check    # 打包校验（wrangler dry-run）
 ```
 
 - 行为改动先写用例（红），再改代码（绿）。
+
+### 测试怎么组织
+
+| 目录 | 跑法 | 放什么 |
+|---|---|---|
+| `test/unit/` | `npm run test:unit` | 纯函数的边界（`stripQuery` 的 null/非法 URL/重复键、`readTarget` 的 `&`/`#`、`mapLimit` 的保序与并发） |
+| `test/integration/` | `npm run test:integration` | 走 `new Request(...)` 的完整契约，一条用例对应一条真实分享文本 |
+| `test-support/` | —— | `helpers.mjs`（`callWorker` / `callRaw` / `stubFetch`）与 `fixtures.mjs`；**不要**放进 `test/`，否则会被 test runner 当成用例执行 |
+| 全量 | `npm test` | 上面全部（78 条） |
+| 覆盖率 | `npm run test:coverage` | Node 内置覆盖率，零依赖 |
+
+纯函数能单测是因为 `index.js` 末尾有一组**只给测试用的命名导出**：
+
+```js
+export { parseUrls, stripQuery, stripTracking, isTrackingKey, keepForHost, hostOf,
+         safeDecode, readTarget, mapLimit, matchRule, cleanOne };
+```
+
+Worker 只认 `export default`，这些命名导出不影响部署。**加导出就要有用例**，否则删掉——它是测试面，
+不是公共 API。
+
+覆盖率基线（`npm run test:coverage`，2026-10-18）：`index.js` 行 91.3%、分支 85.8%、函数 100%。
+PR 不应显著降低；不设硬阈值。已知无法覆盖的分支：`probeFinalUrl` 的真实网络失败、
+`taobaoCnUri` 的落地页兜底、入口 500 兜底。
+
+### 提交前自检
+
 - 需要验证真实边缘行为时用 `npx wrangler dev --local`，不要把"桩 fetch 通过"当成"线上可用"。
-- 提交前确认：`grep -n "^import \|require(" index.js` 无命中；`node --test` 全绿。
+- `grep -n "^import \|require(" index.js` 无命中；`npm test` 全绿。
 
 ## 提交规范
 
@@ -69,7 +96,7 @@ chore: 升级 wrangler
 
 - [ ] `node --test` 全绿，新增行为有用例
 - [ ] `index.js` 仍然没有 `import` / `require`，仍可整段粘贴运行
-- [ ] `npx wrangler deploy --dry-run` 通过，体积没有明显增长（当前约 8.9 KiB / gzip 3.0 KiB）
+- [ ] `npx wrangler deploy --dry-run` 通过，体积没有明显增长（当前约 9.2 KiB / gzip 3.1 KiB）
 - [ ] 域名规则用了点边界后缀匹配
 - [ ] 新增的 query 键放对了地方：业务参数进 `KEEP_PARAMS`，追踪参数进 `TRACKING_*`
 - [ ] README（中英）与 CHANGELOG 已同步
