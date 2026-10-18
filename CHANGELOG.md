@@ -5,6 +5,12 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **`/clean?url=` 单链接 JSON 接口**：返回 `input` / `output` / `host` / `rule` / `changed`，
+  缺参、非法 URL、非 http(s) 分别返回 400 并带 `error` 码。与文本接口共用 `cleanOne`，
+  并有专门用例保证「两条接口对同一链接输出一致」。实现上把 `readTarget` 泛化成 `readParam`。
+
 ### 修复
 
 - **没有链接的文本被吞成空 body**：`process` 在文本里找不到链接时返回空串，用户粘一段纯文字

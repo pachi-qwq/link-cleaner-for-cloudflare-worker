@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     parseUrls, stripQuery, stripTracking, isTrackingKey, hostOf,
-    keepForHost, safeDecode, readTarget, mapLimit,
+    keepForHost, safeDecode, readParam, readTarget, mapLimit,
 } from '../../index.js';
 
 describe('parseUrls', () => {
@@ -167,6 +167,22 @@ describe('readTarget', () => {
     it('缺少 ?target= 返回空串', () => {
         assert.equal(readTarget('https://w.dev/'), '');
         assert.equal(readTarget('https://w.dev/?other=1'), '');
+    });
+});
+
+describe('readParam', () => {
+    it('取任意参数到 URL 末尾', () => {
+        assert.equal(readParam('https://w.dev/?url=https://a.com/x?y=1&z=2', 'url'),
+            'https://a.com/x?y=1&z=2');
+    });
+
+    it('不同参数名互不影响', () => {
+        assert.equal(readParam('https://w.dev/?target=a&url=b', 'url'), 'b');
+    });
+
+    it('不存在时返回空串', () => {
+        assert.equal(readParam('https://w.dev/?other=1', 'url'), '');
+        assert.equal(readParam('https://w.dev/', 'url'), '');
     });
 });
 

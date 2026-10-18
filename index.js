@@ -151,18 +151,21 @@ const safeDecode = (text) => {
     }
 };
 
-// 取 ?target= 之后到 URL 末尾的全部内容。不用 searchParams：
+// 取 query 里某个参数到 URL 末尾的全部内容。不用 searchParams：
 // 原始分享文本里本来就带 & 和 #，用 searchParams 会在第一个 & 处截断。
-const readTarget = (urlString) => {
-    const hashless = urlString.split('#')[0];
+const readParam = (urlString, name) => {
+    const hashless = String(urlString || '').split('#')[0];
     const qIndex = hashless.indexOf('?');
     if (qIndex === -1) {
         return '';
     }
     const query = hashless.slice(qIndex + 1);
-    const match = /(?:^|&)target=([\s\S]*)$/.exec(query);
+    const pattern = new RegExp('(?:^|&)' + name + '=(.*)$', 's');
+    const match = pattern.exec(query);
     return match ? match[1] : '';
 };
+
+const readTarget = (urlString) => readParam(urlString, 'target');
 
 // ========== 3. HANDLERS：单站点处理 ==========
 const biliUri = async (url) => {
@@ -304,6 +307,37 @@ const TEXT_HEADERS = {
 const textResponse = (body, status = 200, extra = {}) =>
     new Response(body, {status, headers: {...TEXT_HEADERS, ...extra}});
 
+const JSON_HEADERS = {...TEXT_HEADERS, 'content-type': 'application/json; charset=utf-8'};
+
+const jsonResponse = (payload, status = 200) =>
+    new Response(JSON.stringify(payload), {status, headers: JSON_HEADERS});
+
+// 单链接接口：复用 cleanOne，保证与文本接口对同一条链接输出一致
+const cleanEndpoint = async (rawUrl) => {
+    const value = safeDecode(readParam(rawUrl, 'url'));
+    if (value === '') {
+        return jsonResponse({error: 'missing url'}, 400);
+    }
+    let parsed;
+    try {
+        parsed = new URL(value);
+    } catch (err) {
+        return jsonResponse({error: 'invalid url'}, 400);
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return jsonResponse({error: 'unsupported scheme'}, 400);
+    }
+    const output = await cleanOne(value);
+    const rule = matchRule(parsed.hostname);
+    return jsonResponse({
+        input: value,
+        output,
+        host: parsed.hostname,
+        rule: rule ? rule.domain : null,
+        changed: output !== value,
+    });
+};
+
 export default {
     async fetch(request) {
         try {
@@ -314,7 +348,12 @@ export default {
             if (method !== 'GET' && method !== 'HEAD') {
                 return textResponse('只支持 GET', 405, {allow: 'GET, HEAD, OPTIONS'});
             }
-            const target = safeDecode(readTarget(String((request && request.url) || '')));
+            const rawUrl = String((request && request.url) || '');
+            const pathname = new URL(rawUrl).pathname;
+            if (pathname === '/clean' || pathname === '/clean/') {
+                return await cleanEndpoint(rawUrl);
+            }
+            const target = safeDecode(readTarget(rawUrl));
             if (target === '') {
                 return textResponse('缺少 target 参数。用法：/?target=<分享文本>', 400);
             }
@@ -329,5 +368,5 @@ export default {
 // 仅供测试：Worker 只认 default 导出，这些命名导出不进运行时路径。
 export {
     parseUrls, stripQuery, stripTracking, isTrackingKey, keepForHost, hostOf,
-    safeDecode, readTarget, mapLimit, matchRule, cleanOne,
+    safeDecode, readParam, readTarget, mapLimit, matchRule, cleanOne,
 };

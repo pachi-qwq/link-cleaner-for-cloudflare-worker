@@ -118,6 +118,38 @@ curl "https://link-cleaner.<你的子域>.workers.dev/?target=https://item.jd.co
 # → https://item.jd.com/1.html
 ```
 
+### 单链接接口：`/clean`
+
+给脚本用。返回 JSON，不返回文本。
+
+```
+GET /clean?url=<单个 URL>
+→ 200 application/json
+  {
+    "input":   "https://item.jd.com/1.html?utm_source=x",
+    "output":  "https://item.jd.com/1.html",
+    "host":    "item.jd.com",
+    "rule":    "jd.com",
+    "changed": true
+  }
+```
+
+| 字段 | 说明 |
+|---|---|
+| `input` | 解码后的原始 URL |
+| `output` | 清洗结果（与文本接口对同一链接的结果一致） |
+| `host` | URL 的 hostname |
+| `rule` | 命中的站点规则名（如 `jd.com`）；未命中为 `null` |
+| `changed` | `output !== input` |
+
+错误：缺 `url` → `400 {"error":"missing url"}`；URL 不合法 → `400 {"error":"invalid url"}`；
+非 http/https → `400 {"error":"unsupported scheme"}`。
+
+```bash
+curl -s "https://link-cleaner.<你的子域>.workers.dev/clean?url=https%3A%2F%2Fitem.jd.com%2F1.html%3Futm_source%3Dx" | jq -r .output
+# https://item.jd.com/1.html
+```
+
 ## 支持的站点
 
 域名匹配规则是「相等或点边界后缀」：`www.` / `item.` / `m.` / `v.` / `e.` 都能命中，

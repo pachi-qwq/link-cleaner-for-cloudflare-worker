@@ -127,6 +127,38 @@ curl "https://link-cleaner.<your-subdomain>.workers.dev/?target=https://item.jd.
 # → https://item.jd.com/1.html
 ```
 
+### Single-link endpoint: `/clean`
+
+For scripts. Returns JSON instead of text.
+
+```
+GET /clean?url=<single URL>
+→ 200 application/json
+  {
+    "input":   "https://item.jd.com/1.html?utm_source=x",
+    "output":  "https://item.jd.com/1.html",
+    "host":    "item.jd.com",
+    "rule":    "jd.com",
+    "changed": true
+  }
+```
+
+| Field | Meaning |
+|---|---|
+| `input` | The decoded input URL |
+| `output` | The cleaned URL (identical to what the text endpoint produces for the same link) |
+| `host` | The URL's hostname |
+| `rule` | The matched site rule (e.g. `jd.com`), or `null` when no rule matched |
+| `changed` | `output !== input` |
+
+Errors: missing `url` → `400 {"error":"missing url"}`; malformed URL → `400 {"error":"invalid url"}`;
+non-http(s) → `400 {"error":"unsupported scheme"}`.
+
+```bash
+curl -s "https://link-cleaner.<your-subdomain>.workers.dev/clean?url=https%3A%2F%2Fitem.jd.com%2F1.html%3Futm_source%3Dx" | jq -r .output
+# https://item.jd.com/1.html
+```
+
 ## Supported sites
 
 Host matching is exact-or-dot-boundary suffix: `www.`, `item.`, `m.`, `v.`, `e.` all match, while
