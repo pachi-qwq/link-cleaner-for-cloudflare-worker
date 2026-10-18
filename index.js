@@ -3,7 +3,12 @@
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
 
-const COMMON_FETCH_PARAMS = {method: 'HEAD', timeout: 20000}
+// 子请求限额：CF 免费档每个请求 50 个子请求，别让一段文本把配额打满
+const FETCH_LIMITS = {
+    maxUrls: 20,        // 单次请求最多解析多少条链接，超出的原样返回
+    concurrency: 5,     // 同时在飞的子请求上限
+    timeoutMs: 8000,    // 单条子请求超时
+};
 
 // 各站点清洗时必须保留的 query 键。不在表里的站点表示「一个 query 都不需要」。
 const KEEP_PARAMS = {
@@ -65,6 +70,41 @@ const keepForHost = (host) => {
 // 保留这个名字：语义 = 删掉全部 query（null/'' 返回 ''）
 const removeParams = (uri) => stripQuery(uri ?? '');
 
+// 解析短链：拿最终地址只能靠 resp.url —— Worker 内新建的 fetch 默认跟随重定向，
+// 跟随之后响应头里没有 Location（入参 Request 才是 manual，两个方向别混）。
+// HEAD 被拒时降级 GET；任何失败都返回 ''，由调用方决定降级策略。
+const probeFinalUrl = async (url) => {
+    const once = (method) => fetch(url, {
+        method,
+        redirect: 'follow',
+        signal: AbortSignal.timeout(FETCH_LIMITS.timeoutMs),
+    });
+    try {
+        let resp = await once('HEAD');
+        if (resp.status === 403 || resp.status === 405 || resp.status === 501) {
+            resp = await once('GET');
+        }
+        return resp.url || '';
+    } catch (err) {
+        console.warn('probe failed', url, err && err.message);
+        return '';
+    }
+};
+
+// 有界并发：全部跑完才返回，输出顺序与输入一致
+const mapLimit = async (items, limit, fn) => {
+    const out = new Array(items.length);
+    let cursor = 0;
+    const runners = Array.from({length: Math.min(limit, items.length)}, async () => {
+        while (cursor < items.length) {
+            const index = cursor++;
+            out[index] = await fn(items[index], index);
+        }
+    });
+    await Promise.all(runners);
+    return out;
+};
+
 const getUrlParams = (url) => {
     const origin = url.split('?')[0]
     return url.split(`${origin}?target=`)[1]
@@ -72,35 +112,37 @@ const getUrlParams = (url) => {
 
 // ========== 3. HANDLERS：单站点处理 ==========
 const biliUri = async (url) => {
-    let uri = url;
-    if (uri.includes('b23.tv')) {
-        const resp = await fetch(uri, COMMON_FETCH_PARAMS);
-        uri = resp.url || uri;
-    }
-    return stripQuery(uri, keepForHost(hostOf(uri)));
+    const finalUrl = url.includes('b23.tv') ? await probeFinalUrl(url) : url;
+    const target = finalUrl || url;
+    return stripQuery(target, keepForHost(hostOf(target)));
 }
 
 // 淘宝 / 天猫长链：必需参数是 id
 const taobaoComUri = async (url) => stripQuery(url, keepForHost(hostOf(url)));
 
 const taobaoCnUri = async (url) => {
-    let uri = decodeURIComponent(url);
-    if (uri.includes("taobao.com")) {
-        return taobaoComUri(uri);
+    const finalUrl = await probeFinalUrl(url);
+    if (/^https?:\/\/([a-z0-9-]+\.)*(taobao|tmall)\.com\//i.test(finalUrl)) {
+        return taobaoComUri(finalUrl);
     }
-    const start = uri.indexOf("https");
-    const end = uri.indexOf(" ");
-    const goodName = uri.substring(end);
-    const realUri = uri.substring(start, end);
-    const result = await fetch(realUri, {method: 'GET', timeout: 20000});
-    const responseBody = await result.text();
-    const regex = /var url = '([^'\r\n]*)';/;
-    const matcher = responseBody.match(regex);
-    if (matcher) {
-        uri = matcher[1];
+    // 兜底：短链落在自建落地页，页面里有 var url = '...'（需要 GET 才能拿 body）
+    try {
+        const resp = await fetch(url, {
+            redirect: 'follow',
+            signal: AbortSignal.timeout(FETCH_LIMITS.timeoutMs),
+        });
+        const body = await resp.text();
+        // 不用正则：单个文件里少一层转义，读起来也更直白
+        const marker = "var url = '";
+        const at = body.indexOf(marker);
+        const end = at === -1 ? -1 : body.indexOf("';", at + marker.length);
+        if (at !== -1 && end !== -1) {
+            return taobaoComUri(body.slice(at + marker.length, end));
+        }
+    } catch (err) {
+        console.warn('taobao cn fallback failed', err && err.message);
     }
-
-    return `${goodName} ${await taobaoComUri(uri)}`;
+    return url;
 }
 
 // 拼多多：必需参数是 goods_id
@@ -109,53 +151,20 @@ const pddGoodsUri = async (url) => stripQuery(url, keepForHost(hostOf(url)));
 const jdUri = async (url) => removeParams(url);
 
 const douyinUri = async (url) => {
-    const uri = url;
-    const startIndex = uri.indexOf("抖音，");
-    const httpsIndex = uri.indexOf("https");
-    const text = uri.substring(startIndex + 3, httpsIndex);
-    const newUri = uri.substring(httpsIndex);
-
-    const resp = await fetch(newUri, COMMON_FETCH_PARAMS);
-    const location = resp.headers.get('Location');
-    const newLocation = removeParams(location);
-    const regex = /\/(\d+)\//;
-    const match = newLocation.match(regex);
-
-    if (match) {
-        const videoId = match[1];
-        const newUriTemplate = "https://www.douyin.com/video/%s";
-        const result = newUriTemplate.replace('%s', videoId);
-        return text + result;
+    const finalUrl = await probeFinalUrl(url);
+    if (finalUrl === '') {
+        return url;
     }
-
-    return url;
+    const match = finalUrl.match(/\/video\/(\d+)/) || finalUrl.match(/\/(\d{6,})\//);
+    return match ? 'https://www.douyin.com/video/' + match[1] : url;
 }
 
 const xiaohongshuUri = async (url) => {
-    let schemePrefix = null;
-    if (url.includes("http://")) {
-        schemePrefix = "http://";
-    } else if (url.includes("https://")) {
-        schemePrefix = "https://";
-    } else {
-        console.log(`${url} is not supported now.`);
-    }
-    const httpIndex = url.lastIndexOf(schemePrefix);
-    // 正则表达式匹配 URI
-    const regex = /(?<=http:\/\/|https:\/\/)[\w\d+./?=]+/;
-    const matcher = url.match(regex);
-
-    // 寻找匹配项并输出结果
-    if (matcher) {
-        const uri = matcher[0];
-        const resp = await fetch(schemePrefix + uri, COMMON_FETCH_PARAMS);
-        const location = resp.headers.get('Location');
-        const cleanedUri = removeParams(location);
-        return url.substring(0, httpIndex) + " " + cleanedUri;
-    }
-    return "";
+    // 短链先解析成最终地址；xsec_token 的保留逻辑见 005
+    const finalUrl = url.includes('xhslink.com') ? await probeFinalUrl(url) : url;
+    const target = finalUrl || url;
+    return stripQuery(target);
 }
-
 // ========== 4. ROUTER：host → handler ==========
 // 匹配规则是「相等或点边界后缀」：www./item./m./v. 等子域都能命中，
 // 而 evil-bilibili.com 不会误命中（点边界是安全边界，不是风格问题）。
@@ -208,13 +217,15 @@ const process = async (url) => {
     }
 
     const urls = parseUrls(target)
-    if (urls == null || urls.length === 0) {
+    if (urls.length === 0) {
         return '';
     }
-    const processedUrls = await Promise.all(urls.map(cleanOne));
-    return target.replace(URL_REGEX, () => (processedUrls.shift()));
-}
+    const processed = await mapLimit(urls, FETCH_LIMITS.concurrency,
+        (item, index) => (index < FETCH_LIMITS.maxUrls ? cleanOne(item) : Promise.resolve(item)));
 
+    let cursor = 0;
+    return target.replace(URL_REGEX, () => processed[cursor++]);
+}
 // ========== 5. ENTRY：export default { fetch } ==========
 export default {
     async fetch({url}, env, ctx) {

@@ -86,3 +86,65 @@ test('B站业务参数 p / t 必须保留', async () => {
     const res = await callWorker('https://www.bilibili.com/video/BV1x?p=2&t=30&share_source=copy');
     assert.equal(await res.text(), 'https://www.bilibili.com/video/BV1x?p=2&t=30');
 });
+
+// ---------- 004：短链解析 ----------
+
+test('douyin 短链解析成 video 直链（不依赖 Location 头）', async (t) => {
+    const stub = stubFetch({ 'https://v.douyin.com/rHKxxxx/': 'https://www.iesdouyin.com/share/video/7168098046780214580/?region=CN' });
+    t.after(stub.restore);
+    const res = await callWorker('https://v.douyin.com/rHKxxxx/');
+    assert.equal(await res.text(), 'https://www.douyin.com/video/7168098046780214580');
+});
+
+test('tb.cn 短链解析后保留商品 id', async (t) => {
+    const stub = stubFetch({ 'https://m.tb.cn/h.fAwWH69': 'https://item.taobao.com/item.htm?spm=a1&id=67803651&skuId=5' });
+    t.after(stub.restore);
+    const res = await callWorker('https://m.tb.cn/h.fAwWH69');
+    assert.equal(await res.text(), 'https://item.taobao.com/item.htm?id=67803651');
+});
+
+test('单条解析失败只影响它自己', async (t) => {
+    const real = globalThis.fetch;
+    t.after(() => { globalThis.fetch = real; });
+    globalThis.fetch = async (url, init) => {
+        if (String(url).includes('/bad')) throw new Error('boom');
+        return { url: String(url), status: 200, headers: { get: () => null }, text: async () => '' };
+    };
+    const res = await callWorker('https://b23.tv/bad https://b23.tv/good');
+    assert.equal(await res.text(), 'https://b23.tv/bad https://b23.tv/good');
+});
+
+test('HEAD 被拒时降级 GET', async (t) => {
+    const seen = [];
+    const real = globalThis.fetch;
+    t.after(() => { globalThis.fetch = real; });
+    globalThis.fetch = async (url, init) => {
+        seen.push(init.method);
+        if (init.method === 'HEAD') {
+            return { url: '', status: 403, headers: { get: () => null }, text: async () => '' };
+        }
+        return { url: 'https://www.bilibili.com/video/BV1x', status: 200, headers: { get: () => null }, text: async () => '' };
+    };
+    await callWorker('https://b23.tv/x');
+    assert.deepEqual(seen, ['HEAD', 'GET']);
+});
+
+test('30 条链接：最多 20 个子请求，并发不超过 5', async (t) => {
+    let inflight = 0;
+    let peak = 0;
+    let total = 0;
+    const real = globalThis.fetch;
+    t.after(() => { globalThis.fetch = real; });
+    globalThis.fetch = async () => {
+        total++;
+        inflight++;
+        peak = Math.max(peak, inflight);
+        await new Promise((r) => setTimeout(r, 5));
+        inflight--;
+        return { url: '', status: 200, headers: { get: () => null }, text: async () => '' };
+    };
+    const text = Array.from({ length: 30 }, (_, i) => 'https://b23.tv/x' + i).join(' ');
+    await callWorker(text);
+    assert.equal(total, 20);
+    assert.ok(peak <= 5, 'peak concurrency ' + peak);
+});
