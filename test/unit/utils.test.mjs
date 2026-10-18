@@ -94,6 +94,13 @@ describe('isTrackingKey', () => {
         }
     });
 
+    it('常见全局点击 ID 也识别（gclid/fbclid/msclkid 等）', () => {
+        for (const key of ['gclid', 'dclid', 'gbraid', 'wbraid', 'fbclid', 'msclkid', 'yclid', 'twclid',
+            'igshid', '_openstat', '_ga', 'mc_cid', 'mkt_tok', 'srsltid']) {
+            assert.equal(isTrackingKey(key), true, key);
+        }
+    });
+
     it('业务参数不误判', () => {
         for (const key of ['id', 'goods_id', 'v', 'q', 'p', 'keyword', 'xsec_token']) {
             assert.equal(isTrackingKey(key), false, key);

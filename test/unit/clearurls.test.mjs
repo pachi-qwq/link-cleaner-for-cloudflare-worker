@@ -22,9 +22,13 @@ describe('ClearURLs 精选规则：结构与边界', () => {
         }
     });
 
-    it('命中 exceptions 的 URL 原样返回（facebook 分享弹窗）', () => {
-        const url = 'https://www.facebook.com/dialog/share?app_id=1&utm_source=wx';
-        assert.equal(stripByProviderRules(url), url);
+    it('命中 exceptions 只豁免该 provider 的规则，通用黑名单仍生效（facebook 分享弹窗）', () => {
+        // facebook 的 exceptions 保护 dialog/share 不被它的 rules 清理，
+        // 但 utm_source / gclid 属通用黑名单，仍应删除（与 ClearURLs 的 globalRules 语义一致）
+        assert.equal(
+            stripByProviderRules('https://www.facebook.com/dialog/share?app_id=1&utm_source=wx&gclid=2'),
+            'https://www.facebook.com/dialog/share?app_id=1',
+        );
     });
 
     it('未命中 provider 的站点仍走手写黑名单', () => {

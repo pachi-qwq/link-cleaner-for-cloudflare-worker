@@ -172,6 +172,11 @@ test('业务参数 ?v= 绝不能被删（防通用分支变死链）', async () 
     assert.equal(await res.text(), 'https://www.youtube.com/watch?v=abc123');
 });
 
+test('常见广告点击 ID 在任意站点都会被删（gclid/fbclid/msclkid）', async () => {
+    const res = await callWorker('https://www.example.com/p?gclid=1&fbclid=2&msclkid=3&u=keep');
+    assert.equal(await res.text(), 'https://www.example.com/p?u=keep');
+});
+
 test('小红书 web 链接只留 xsec_token', async () => {
     const res = await callWorker('https://www.xiaohongshu.com/discovery/item/66f1a2b3?xsec_token=ABxyz123&xsec_source=pc_share&share_from_user_hidden=true');
     assert.equal(await res.text(), 'https://www.xiaohongshu.com/discovery/item/66f1a2b3?xsec_token=ABxyz123');
@@ -209,11 +214,12 @@ test('POST 返回 405', async () => {
     assert.equal(res.headers.get('allow'), 'GET, HEAD, OPTIONS');
 });
 
-test('响应头：text/plain + CORS + no-store', async () => {
+test('响应头：text/plain + CORS + no-store + nosniff', async () => {
     const res = await callWorker('https://item.jd.com/1.html');
     assert.match(res.headers.get('content-type'), /text\/plain/);
     assert.equal(res.headers.get('access-control-allow-origin'), '*');
     assert.equal(res.headers.get('cache-control'), 'no-store');
+    assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
 });
 
 test('OPTIONS 返回 204 预检', async () => {

@@ -20,16 +20,27 @@ const KEEP_PARAMS = {
 
 // 未知站点只删这些键，其余保留。宁可漏删，不要误删——删错的代价是死链。
 const TRACKING_EXACT = new Set([
+    // 国内平台
     'spm', 'scm', 'vd_source', 'from_source', 'refer', 'unique_k', 'bbk',
     'refer_share_id', 'refer_share_channel', 'refer_share_uin', 'share_uin',
     'share_plat', 'share_session_id', 'share_tag', 'share_medium', 'share_source',
     'share_from_user_hidden', 'page_from', 'pxq_secret_key', 'isappinstalled',
     '_x_org', 'xsec_source', 'xsec_source_type', 'scene', 'srcid', 'timestamp', 't',
+    // 常见全局点击 ID / 邮件与广告追踪（键名同 ClearURLs globalRules，见 NOTICE）
+    'gclid', 'dclid', 'gbraid', 'wbraid', 'fbclid', 'msclkid', 'yclid', 'twclid',
+    'igshid', 'igsh', '_openstat', 'vero_id', 'vero_conv', 'wickedid', 'mkt_tok',
+    'rb_clickid', 's_cid', 'cmpid', 'srsltid', '_ga', '_gl', 'gs_l', 'gs_lcp',
+    'mc_cid', 'mc_eid', 'wt_mc', 'wtrid', 'ml_subscriber', 'ml_subscriber_hash',
+    'tracking_source', 'fb_action_ids', 'fb_action_types', 'fb_source', 'fb_ref',
+    'action_object_map', 'action_type_map', 'action_ref_map',
+    'hmb_campaign', 'hmb_medium', 'hmb_source', 'itm_source', 'itm_medium', 'itm_campaign',
+    '__hssc', '__hstc', '__hsfp', '_hsenc', 'oly_anon_id', 'oly_enc_id',
 ]);
 const TRACKING_PREFIX = ['utm_', 'share_', '_wv'];
 
 // 精选自 ClearURLs Rules（LGPL-3.0，快照 2026-10-18）：
 // 27 个高频站点，只保留 urlPattern / rules / exceptions，已剔除 redirections 与 rawRules。
+// 上游标记 completeProvider 的 provider（整段 query 全删）本项目一个都没选，故运行时不处理该字段。
 // 更新方式：人工核对 https://github.com/ClearURLs/Rules/blob/master/data.min.json 后替换本块。
 // 许可说明见 NOTICE。
 const CLEARURLS_PROVIDERS = {
@@ -270,7 +281,6 @@ const compileClearUrls = () => {
     CLEARURLS_COMPILED = Object.entries(CLEARURLS_PROVIDERS).map(([name, provider]) => ({
         name,
         match: new RegExp(provider.urlPattern, 'i'),
-        emptyAll: provider.completeProvider === true,
         exceptions: (provider.exceptions || []).map((source) => {
             try {
                 return new RegExp(source, 'i');
@@ -291,27 +301,28 @@ const compileClearUrls = () => {
 };
 
 // 命中 provider 就按它的规则删参数；没命中退回手写黑名单。
+// 例外（exceptions）只豁免这个 provider 的规则，不豁免通用黑名单——这与 ClearURLs 一致：
+// 它的 globalRules 是独立的一层，provider 例外不影响它。
 const stripByProviderRules = (url) => {
+    let u;
+    try {
+        u = new URL(url);
+    } catch (err) {
+        return url;
+    }
     for (const provider of compileClearUrls()) {
         if (!provider.match.test(url)) {
             continue;
         }
         if (provider.exceptions.some((re) => re.test(url))) {
-            return url;
-        }
-        let u;
-        try {
-            u = new URL(url);
-        } catch (err) {
-            return url;
+            continue;
         }
         if (!u.search) {
             return url;
         }
         for (const key of [...u.searchParams.keys()]) {
-            // provider 规则是「叠加」在通用黑名单之上的：命中 provider 后仍要按 TRACKING_*
-            // 再洗一遍，否则 youtube 这类站点会丢掉 utm_* 的清理（它的 provider 规则里没有）。
-            if (provider.emptyAll || provider.rules.some((re) => re.test(key)) || isTrackingKey(key)) {
+            // provider 规则叠加在通用黑名单之上：命中 provider 后仍按 TRACKING_* 再洗一遍
+            if (provider.rules.some((re) => re.test(key)) || isTrackingKey(key)) {
                 u.searchParams.delete(key);
             }
         }
@@ -484,6 +495,7 @@ const TEXT_HEADERS = {
     'content-type': 'text/plain; charset=utf-8',
     'access-control-allow-origin': '*',
     'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
 };
 
 const textResponse = (body, status = 200, extra = {}) =>
