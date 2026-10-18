@@ -141,10 +141,31 @@ const stripTracking = (url) => {
     return u.toString();
 };
 
-const getUrlParams = (url) => {
-    const origin = url.split('?')[0]
-    return url.split(`${origin}?target=`)[1]
-}
+// 容错解码：输入可能是原始分享文本（含裸 %），也可能是百分号编码过的。
+// 解不出来就原样返回——永远不要因为用户文本里有 '%' 就抛 500。
+const safeDecode = (text) => {
+    if (typeof text !== 'string' || text === '') {
+        return '';
+    }
+    try {
+        return decodeURIComponent(text);
+    } catch (err) {
+        return text;
+    }
+};
+
+// 取 ?target= 之后到 URL 末尾的全部内容。不用 searchParams：
+// 原始分享文本里本来就带 & 和 #，用 searchParams 会在第一个 & 处截断。
+const readTarget = (urlString) => {
+    const hashless = urlString.split('#')[0];
+    const qIndex = hashless.indexOf('?');
+    if (qIndex === -1) {
+        return '';
+    }
+    const query = hashless.slice(qIndex + 1);
+    const match = /(?:^|&)target=([\s\S]*)$/.exec(query);
+    return match ? match[1] : '';
+};
 
 // ========== 3. HANDLERS：单站点处理 ==========
 const biliUri = async (url) => {
@@ -246,11 +267,7 @@ const cleanOne = async (url) => {
     }
 };
 
-const process = async (url) => {
-    if ((url ?? '') === '') {
-        return '';
-    }
-    const target = getUrlParams(url);
+const process = async (target) => {
     if ((target ?? '') === '') {
         return '';
     }
@@ -266,9 +283,33 @@ const process = async (url) => {
     return target.replace(URL_REGEX, () => processed[cursor++]);
 }
 // ========== 5. ENTRY：export default { fetch } ==========
+const TEXT_HEADERS = {
+    'content-type': 'text/plain; charset=utf-8',
+    'access-control-allow-origin': '*',
+    'cache-control': 'no-store',
+};
+
+const textResponse = (body, status = 200, extra = {}) =>
+    new Response(body, {status, headers: {...TEXT_HEADERS, ...extra}});
+
 export default {
-    async fetch({url}, env, ctx) {
-        const res = await process(url);
-        return new Response(decodeURIComponent(res || ''));
+    async fetch(request) {
+        try {
+            const method = (request && request.method) || 'GET';
+            if (method === 'OPTIONS') {
+                return new Response(null, {status: 204, headers: TEXT_HEADERS});
+            }
+            if (method !== 'GET' && method !== 'HEAD') {
+                return textResponse('只支持 GET', 405, {allow: 'GET, HEAD, OPTIONS'});
+            }
+            const target = safeDecode(readTarget(String((request && request.url) || '')));
+            if (target === '') {
+                return textResponse('缺少 target 参数。用法：/?target=<分享文本>', 400);
+            }
+            return textResponse(await process(target));
+        } catch (err) {
+            console.warn('unhandled', err && err.message);
+            return textResponse('内部错误', 500);
+        }
     },
 };

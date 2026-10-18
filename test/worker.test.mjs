@@ -4,10 +4,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../index.js';
 
-// 今天的入参契约是「原文未编码直接拼在 ?target= 后面」（见 index.js 的 getUrlParams）。
-// 006 会改成百分号编码，届时只改这一个函数。
+// 契约：target 按标准做百分号编码（006 之后）。所有用例都走这个入口。
 const callWorker = async (text) =>
-    worker.fetch({ url: 'https://w.dev/?target=' + text }, {}, {});
+    worker.fetch(new Request('https://w.dev/?target=' + encodeURIComponent(text)), {}, {});
+
+// 兼容性入口：原始未编码文本（老用户的书签长这样，内部 & 不能被截断）
+const callRaw = async (raw) =>
+    worker.fetch(new Request('https://w.dev/?target=' + raw), {}, {});
 
 // 替换全局 fetch，返回调用记录与恢复函数。
 // CF 语义建模：follow 之后 headers 里没有 Location，最终地址只能从 .url 读。
@@ -29,8 +32,12 @@ test('b23 短链解析（唯一当前可用路径，作为回归锚点）', asyn
     assert.equal(await res.text(), '【标题】 https://www.bilibili.com/video/BV1M4411q7W8');
 });
 
-test('已知缺陷锚点：百分比文本抛 URIError（006 修）', async () => {
-    await assert.rejects(callWorker('全场 50% off https://b23.tv/GUOxxxx'), /URI malformed/);
+test('文本里的裸 % 不再抛 URIError（006 修）', async (t) => {
+    const stub = stubFetch({ 'https://b23.tv/GUOxxxx': 'https://www.bilibili.com/video/BV1M' });
+    t.after(stub.restore);
+    const res = await callWorker('全场 50% off https://b23.tv/GUOxxxx');
+    assert.equal(res.status, 200);
+    assert.equal(await res.text(), '全场 50% off https://www.bilibili.com/video/BV1M');
 });
 
 // ---------- 002：路由 ----------
@@ -177,4 +184,36 @@ test('小红书短链解析后同样保留 xsec_token', async (t) => {
     t.after(stub.restore);
     const res = await callWorker('https://xhslink.com/a/abcDEF');
     assert.equal(await res.text(), 'https://www.xiaohongshu.com/discovery/item/66f1a2b3?xsec_token=ABxyz');
+});
+
+// ---------- 006：接口契约 ----------
+
+test('百分号编码的 target 能正常处理', async () => {
+    const res = await callWorker('https://item.jd.com/1.html?utm_source=a');
+    assert.equal(res.status, 200);
+    assert.equal(await res.text(), 'https://item.jd.com/1.html');
+});
+
+test('原始未编码 target 仍可用，内部 & 不被截断', async () => {
+    const res = await callRaw('https://item.jd.com/1.html?utm_source=a&ad_od=b');
+    assert.equal(await res.text(), 'https://item.jd.com/1.html');
+});
+
+test('缺少 target 返回 400 且有提示', async () => {
+    const res = await worker.fetch(new Request('https://w.dev/'), {}, {});
+    assert.equal(res.status, 400);
+    assert.match(await res.text(), /target/);
+});
+
+test('POST 返回 405', async () => {
+    const res = await worker.fetch(new Request('https://w.dev/?target=x', { method: 'POST' }), {}, {});
+    assert.equal(res.status, 405);
+    assert.equal(res.headers.get('allow'), 'GET, HEAD, OPTIONS');
+});
+
+test('响应头：text/plain + CORS + no-store', async () => {
+    const res = await callWorker('https://item.jd.com/1.html');
+    assert.match(res.headers.get('content-type'), /text\/plain/);
+    assert.equal(res.headers.get('access-control-allow-origin'), '*');
+    assert.equal(res.headers.get('cache-control'), 'no-store');
 });

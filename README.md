@@ -10,25 +10,40 @@ GET https://<worker>/?target=<分享文本>
 → 200 text/plain：清洗后的文本（标题、文案原样保留，只有其中的链接被替换）
 ```
 
-当前 `target` 按**原始文本**拼在 URL 后面（不做百分号解码）。解析不了链接时原样返回。
-错误路径目前一律返回 `200` 加空 body——错误码与响应头正在改造中。
+| 情况 | 响应 |
+|---|---|
+| 正常 | `200`，`text/plain; charset=utf-8`，`cache-control: no-store`，`access-control-allow-origin: *` |
+| 缺 `?target=` | `400` + 一行提示文本 |
+| 非 GET/HEAD/OPTIONS | `405`，带 `allow: GET, HEAD, OPTIONS` |
+| 内部异常 | `500` + 一行提示文本（不会出现 CF 1101 错误页） |
+| `OPTIONS` | `204`（CORS 预检） |
+
+`target` 建议用百分号编码（`?target=` + `encodeURIComponent(分享文本)`）；也兼容原始未编码文本，
+此时 `?target=` 之后的整段内容（含 `&`、`#`）都算 target。解码是容错的：文本里有裸 `%`
+（例如「全场 50% off」）不会报错。
 
 ## 支持的站点
 
-| 站点 | 形态 | 状态 |
+| 站点 | 形态 | 处理方式 |
 |---|---|---|
-| 哔哩哔哩 | `b23.tv/xxx` 短链 | 可用 |
-| 哔哩哔哩 | `www.bilibili.com/video/BVxxx?...` 长链 | 待修（子域没命中路由） |
-| 拼多多 | `mobile.yangkeduo.com/goods.html?...` | 可用 |
-| 淘宝 / 天猫 | `item.taobao.com/item.htm?...` | 待修（商品 id 会被丢掉） |
-| 淘宝 | `m.tb.cn/xxx` 短链 | 待修 |
-| 京东 | `item.jd.com/...` | 待修（handler 内有变量名错误，且子域没命中路由） |
-| 抖音 | `v.douyin.com/xxx` 短链 | 待修 |
-| 小红书 | `xhslink.com/xxx` 短链 | 待修（当前会把链接清成空格） |
-| 小红书 | `xiaohongshu.com/...?xsec_token=...` | 待修（`xsec_token` 是必需参数，不能被删） |
-| 其它站点 | 任意 | 暂不处理 |
+| 哔哩哔哩 | `b23.tv/xxx` 短链 | 解析成 `bilibili.com/video/BVxxx`，保留 `?p=`（分P）、`?t=`（起播秒数） |
+| 哔哩哔哩 | `*.bilibili.com/video/BVxxx?...` | 只保留 `p` / `t` |
+| 拼多多 | `*.yangkeduo.com/goods.html?...` | 只保留 `goods_id` |
+| 淘宝 / 天猫 | `*.taobao.com`、`*.tmall.com` | 只保留 `id` |
+| 淘宝 | `m.tb.cn/xxx` 短链 | 解析成商品页，只保留 `id`；解析不到时回退读落地页里的 `var url='...'` |
+| 京东 | `*.jd.com` | 删掉全部 query |
+| 抖音 | `v.douyin.com/xxx`、`*.douyin.com` | 解析成 `www.douyin.com/video/<id>` |
+| 小红书 | `xhslink.com/xxx` 短链 | 解析成笔记页，只保留 `xsec_token` |
+| 小红书 | `*.xiaohongshu.com/...?xsec_token=...` | 只保留 `xsec_token`（缺了它微信里打不开） |
+| 其它站点 | 任意 | 删掉已知追踪键（`utm_*`、`spm`、`scm`、`share_*`、`_wv*` 等），其余保留 |
 
-「待修」项的处理计划见 `D:\tmp\docs\link-cleaner-for-cloudflare-worker-plans\`，按 001–006 依次实施。
+域名匹配是「相等或点边界后缀」：`www.` / `item.` / `m.` / `v.` 都能命中，`evil-bilibili.com` 不会。
+
+### 为什么不学上游「未知站点一律砍掉 `?` 之后」
+
+上游 Java 版对未知站点直接 `substring(0, '?')`。在剪贴板工具里勉强能用，但会给
+`youtube.com/watch?v=xxx`、`bing.com/search?q=xxx` 这类链接造出死链。这里改成黑名单：
+只删已知追踪键，漏删可以接受，误删不行。
 
 ## 本地开发
 
@@ -57,6 +72,13 @@ npm run check      # 只做打包校验，不部署
 ```
 
 `package.json` / `wrangler.toml` / `test/` 都是开发期资产，不进部署产物。
+
+### 运行时注意
+
+Worker 内新建的 `fetch()` 默认跟随重定向，**跟随之后拿不到 `Location` 头**，最终地址只能读
+`response.url`；`fetch(url, {timeout})` 的 `timeout` 是无效键，取消要用 `AbortSignal.timeout()`。
+短链解析限 `FETCH_LIMITS`：单次请求最多解析 20 条链接、同时在飞 5 个、单条 8 秒超时
+（CF 免费档每请求 50 个子请求）。
 
 ## 许可
 
