@@ -1,0 +1,16 @@
+本项目的源代码以 MIT 许可发布（见 LICENSE）。
+
+本项目的追踪参数清洗规则中，有一部分**数据**（index.js 里的 `CLEARURLS_PROVIDERS` 常量：
+27 个站点的 `urlPattern` / `rules` / `exceptions`）取自 ClearURLs Rules：
+
+    https://github.com/ClearURLs/Rules
+    Copyright (c) ClearURLs contributors
+    Licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
+    https://github.com/ClearURLs/Rules/blob/master/LICENSE
+
+该数据块按 LGPL-3.0 使用与分发，不适用本项目的 MIT 许可。
+本项目**未使用** ClearURLs 的源代码，只使用了其规则数据（JSON 快照，2026-10-18）。
+
+如需完全移除该数据，删除 `CLEARURLS_PROVIDERS` 常量、`compileClearUrls()` 与
+`stripByProviderRules()` 中对它的引用，并把 `cleanOne` 的未命中分支改回 `stripTracking(url)` 即可——
+之后本项目只保留自写的追踪键黑名单。

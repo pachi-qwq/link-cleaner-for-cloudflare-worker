@@ -28,6 +28,128 @@ const TRACKING_EXACT = new Set([
 ]);
 const TRACKING_PREFIX = ['utm_', 'share_', '_wv'];
 
+// 精选自 ClearURLs Rules（LGPL-3.0，快照 2026-10-18）：
+// 27 个高频站点，只保留 urlPattern / rules / exceptions，已剔除 redirections 与 rawRules。
+// 更新方式：人工核对 https://github.com/ClearURLs/Rules/blob/master/data.min.json 后替换本块。
+// 许可说明见 NOTICE。
+const CLEARURLS_PROVIDERS = {
+    "google": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?google(?:\\.[a-z]{2,}){1,}",
+        rules: ["ved", "bi[a-z]*", "gfe_[a-z]*", "ei", "source", "gs_[a-z]*", "site", "oq", "esrc", "uact", "cd", "cad", "gws_[a-z]*", "atyp", "vet", "_u", "je", "dcr", "ie", "sei", "sa", "dpr", "btn[a-z]*", "usg", "cd", "cad", "uact", "aqs", "sourceid", "sxsrf", "rlz", "i-would-rather-use-firefox", "pcampaignid", "sca_(?:esv|upv)", "iflsig", "fbs", "ictx", "cshid"],
+        exceptions: ["^https?:\\/\\/mail\\.google\\.com\\/mail\\/u\\/", "^https?:\\/\\/accounts\\.google\\.com\\/o\\/oauth2\\/", "^https?:\\/\\/accounts\\.google\\.com\\/signin\\/oauth\\/", "^https?:\\/\\/(?:docs|accounts)\\.google(?:\\.[a-z]{2,}){1,}", "^https?:\\/\\/([a-z0-9-\\.])*(chat|drive)\\.google\\.com\\/videoplayback", "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?google(?:\\.[a-z]{2,}){1,}(?:\\/upload)?\\/drive\\/", "^https?:\\/\\/news\\.google\\.com.*\\?hl=.", "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?google(?:\\.[a-z]{2,}){1,}\\/s\\?tbm=map.*?gs_[a-z]*=.", "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?google(?:\\.[a-z]{2,}){1,}\\/(?:complete\\/search|setprefs|searchbyimage)", "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?google(?:\\.[a-z]{2,}){1,}\\/(?:appsactivity|aclk\\?)", "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?google(?:\\.[a-z]{2,}){1,}\\/safe[-]?browsing\\/([^&]+)"],
+    },
+    "youtube": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?(youtube\\.com|youtu\\.be)",
+        rules: ["feature", "gclid", "kw", "si", "pp"],
+        exceptions: ["^https?:\\/\\/(?:[a-z0-9-]+\\.)*?youtube\\.com\\/signin\\?.*?"],
+    },
+    "twitter": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?twitter.com",
+        rules: ["(?:ref_?)?src", "s", "cn", "ref_url", "t"],
+        exceptions: ["^https?:\\/\\/twitter.com\\/i\\/redirect"],
+    },
+    "x": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?x.com",
+        rules: ["(?:ref_?)?src", "s", "cn", "ref_url", "t"],
+        exceptions: ["^https?:\\/\\/x.com\\/i\\/redirect"],
+    },
+    "facebook": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?facebook\\.com",
+        rules: ["hc_[a-z_%\\[\\]0-9]*", "[a-z]*ref[a-z]*", "__tn__", "eid", "__(?:xts|cft)__(?:\\[|%5B)\\d(?:\\]|%5D)", "comment_tracking", "dti", "app", "video_source", "ftentidentifier", "pageid", "padding", "ls_ref", "action_history", "tracking", "referral_code", "referral_story_type", "eav", "sfnsn", "idorvanity", "wtsid", "rdc", "rdr", "paipv", "_nc_x", "_rdr", "mibextid"],
+        exceptions: ["^https?:\\/\\/(?:[a-z0-9-]+\\.)*?facebook\\.com\\/.*?(plugins|ajax)\\/", "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?facebook\\.com\\/dialog\\/(?:share|send)", "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?facebook\\.com\\/groups\\/member_bio\\/bio_dialog\\/", "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?facebook\\.com\\/photo\\.php\\?", "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?facebook\\.com\\/privacy\\/specific_audience_selector_dialog\\/", "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?facebook\\.com\\/photo\\/download\\/"],
+    },
+    "instagram": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?instagram\\.com",
+        rules: ["igshid", "igsh"],
+    },
+    "reddit": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?reddit.com",
+        rules: ["%24deep_link", "\\$deep_link", "correlation_id", "ref_campaign", "ref_source", "%243p", "rdt", "\\$3p", "%24original_url", "\\$original_url", "_branch_match_id", "share_id"],
+    },
+    "amazon": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?amazon(?:\\.[a-z]{2,}){1,}",
+        rules: ["p[fd]_rd_[a-z]*", "qid", "srs?", "__mk_[a-z]{1,3}_[a-z]{1,3}", "spIA", "ms3_c", "[a-z%0-9]*ie", "refRID", "colii?d", "[^a-z%0-9]adId", "qualifier", "_encoding", "smid", "field-lbr_brands_browse-bin", "ref_?", "th", "sprefix", "crid", "keywords", "cv_ct_[a-z]+", "linkCode", "creativeASIN", "ascsubtag", "aaxitk", "hsa_cr_id", "sb-ci-[a-z]+", "rnid", "dchild", "camp", "creative", "content-id", "dib", "dib_tag", "social_share", "starsLeft", "skipTwisterOG"],
+        exceptions: ["^https?:\\/\\/(?:[a-z0-9-]+\\.)*?amazon(?:\\.[a-z]{2,}){1,}\\/gp\\/.*?(?:redirector.html|cart\\/ajax-update.html|video\\/api\\/)", "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?amazon(?:\\.[a-z]{2,}){1,}\\/(?:hz\\/reviews-render\\/ajax\\/|message-us\\?|s\\?)"],
+    },
+    "aliexpress": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?aliexpress(?:\\.[a-z]{2,}){1,}",
+        rules: ["ws_ab_test", "btsid", "algo_expid", "algo_pvid", "gps-id", "scm[_a-z-]*", "cv", "af", "mall_affr", "sk", "dp", "terminal_id", "aff_request_id"],
+    },
+    "ebay": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?ebay(?:\\.[a-z]{2,}){1,}",
+        rules: ["_trkparms", "_trksid", "_from", "hash"],
+    },
+    "bing": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?bing(?:\\.[a-z]{2,}){1,}",
+        rules: ["cvid", "sk", "sp", "sc", "qs", "qp"],
+        exceptions: ["^https?:\\/\\/(?:[a-z0-9-]+\\.)*?bing(?:\\.[a-z]{2,}){1,}\\/WS\\/redirect\\/"],
+    },
+    "netflix": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?netflix.com",
+        rules: ["trackId", "tctx", "jb[a-z]*?"],
+    },
+    "twitch": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?twitch\\.com",
+        rules: ["tt_medium", "tt_content"],
+    },
+    "weibo": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?weibo\\.(cn|com)",
+        rules: ["weibo_id", "dt_dapp"],
+    },
+    "sohu": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?sohu\\.com",
+        rules: ["pvid", "scm"],
+    },
+    "youku.com": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?youku\\.com",
+        rules: ["tpa"],
+    },
+    "tiktok.com": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?tiktok\\.com",
+        rules: ["u_code", "preview_pb", "_d", "_t", "_r", "timestamp", "user_id", "share_app_name", "share_iid", "source"],
+    },
+    "spotify.com": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?spotify\\.com",
+        rules: ["si"],
+    },
+    "medium.com": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?medium\\.com",
+        rules: ["source"],
+    },
+    "github.com": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?github\\.com",
+        rules: ["email_token", "email_source"],
+    },
+    "imdb.com": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?imdb\\.com",
+        rules: ["ref_", "pf_rd_[a-z]*"],
+    },
+    "airbnb": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?airbnb\\.(com|ae|ca|co\\.in|co\\.nz|co\\.uk|co\\.za|com\\.au|com\\.mt|com\\.sg|de|gy|ie)",
+        rules: ["federated_search_id", "search_type", "source", "source_impression_id"],
+    },
+    "snapchat.com": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?snapchat\\.com",
+        rules: ["sc_referrer", "sc_ua"],
+    },
+    "yandex": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?(?:yandex(?:\\.[a-z]{2,}){1,}|ya\\.ru)",
+        rules: ["lr", "redircnt"],
+    },
+    "LinkedIn": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?linkedin\\.com",
+        rules: ["refId", "trk", "li[a-z]{2}", "trackingId"],
+    },
+    "walmart.com": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?walmart\\.com",
+        rules: ["u1", "ath[a-z]*"],
+    },
+    "steampowered": {
+        urlPattern: "^https?:\\/\\/(?:[a-z0-9-]+\\.)*?steampowered\\.com",
+        rules: ["snr"],
+    },
+};
+
 
 // ========== 2. UTILS：纯函数工具 ==========
 const parseUrls = (inputText) => {
@@ -136,6 +258,66 @@ const stripTracking = (url) => {
         }
     }
     return u.toString();
+};
+
+// 懒编译：首次用到时才构造 RegExp，冷启动不为没命中的规则付代价
+let CLEARURLS_COMPILED = null;
+
+const compileClearUrls = () => {
+    if (CLEARURLS_COMPILED) {
+        return CLEARURLS_COMPILED;
+    }
+    CLEARURLS_COMPILED = Object.entries(CLEARURLS_PROVIDERS).map(([name, provider]) => ({
+        name,
+        match: new RegExp(provider.urlPattern, 'i'),
+        emptyAll: provider.completeProvider === true,
+        exceptions: (provider.exceptions || []).map((source) => {
+            try {
+                return new RegExp(source, 'i');
+            } catch (err) {
+                return null;
+            }
+        }).filter(Boolean),
+        rules: provider.rules.map((source) => {
+            try {
+                // 参数名整串匹配：`srs?` 只命中 sr / srs，不会命中 srsomething
+                return new RegExp('^(?:' + source + ')$');
+            } catch (err) {
+                return null;
+            }
+        }).filter(Boolean),
+    }));
+    return CLEARURLS_COMPILED;
+};
+
+// 命中 provider 就按它的规则删参数；没命中退回手写黑名单。
+const stripByProviderRules = (url) => {
+    for (const provider of compileClearUrls()) {
+        if (!provider.match.test(url)) {
+            continue;
+        }
+        if (provider.exceptions.some((re) => re.test(url))) {
+            return url;
+        }
+        let u;
+        try {
+            u = new URL(url);
+        } catch (err) {
+            return url;
+        }
+        if (!u.search) {
+            return url;
+        }
+        for (const key of [...u.searchParams.keys()]) {
+            // provider 规则是「叠加」在通用黑名单之上的：命中 provider 后仍要按 TRACKING_*
+            // 再洗一遍，否则 youtube 这类站点会丢掉 utm_* 的清理（它的 provider 规则里没有）。
+            if (provider.emptyAll || provider.rules.some((re) => re.test(key)) || isTrackingKey(key)) {
+                u.searchParams.delete(key);
+            }
+        }
+        return u.toString();
+    }
+    return stripTracking(url);
 };
 
 // 容错解码：输入可能是原始分享文本（含裸 %），也可能是百分号编码过的。
@@ -272,7 +454,7 @@ const cleanOne = async (url) => {
     }
     const rule = matchRule(host);
     if (!rule) {
-        return stripTracking(url);
+        return stripByProviderRules(url);
     }
     try {
         return await rule.handler(url);
@@ -369,4 +551,5 @@ export default {
 export {
     parseUrls, stripQuery, stripTracking, isTrackingKey, keepForHost, hostOf,
     safeDecode, readParam, readTarget, mapLimit, matchRule, cleanOne,
+    compileClearUrls, stripByProviderRules,
 };
