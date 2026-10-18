@@ -222,7 +222,12 @@ const douyinUri = async (url) => {
     if (finalUrl === '') {
         return url;
     }
-    const match = finalUrl.match(/\/video\/(\d+)/) || finalUrl.match(/\/(\d{6,})\//);
+    // 只在抖音自己的域名上、且确实是 video 形态时才改写：
+    // 用户主页（/share/user/<uid>/）、图集之类的链接不能被伪造成 video 地址。
+    if (!/(^|\.)(iesdouyin|douyin)\.com$/i.test(hostOf(finalUrl))) {
+        return url;
+    }
+    const match = finalUrl.match(/\/(?:share\/)?video\/(\d+)/);
     return match ? 'https://www.douyin.com/video/' + match[1] : url;
 }
 
@@ -284,7 +289,7 @@ const process = async (target) => {
 
     const urls = parseUrls(target)
     if (urls.length === 0) {
-        return '';
+        return target;          // 没有链接就原样返回文本，不能吞成空 body
     }
     const processed = await mapLimit(urls, FETCH_LIMITS.concurrency,
         (item, index) => (index < FETCH_LIMITS.maxUrls ? cleanOne(item) : Promise.resolve(item)));

@@ -109,6 +109,19 @@ test('douyin 短链解析成 video 直链（不依赖 Location 头）', async (t
     assert.equal(await res.text(), 'https://www.douyin.com/video/7168098046780214580');
 });
 
+test('douyin 用户主页短链不能被伪造成 video 链接（回归锚点）', async (t) => {
+    const stub = stubFetch({ 'https://v.douyin.com/abc/': 'https://www.iesdouyin.com/share/user/1234567890/' });
+    t.after(stub.restore);
+    const res = await callWorker('https://v.douyin.com/abc/');
+    assert.equal(await res.text(), 'https://v.douyin.com/abc/');
+});
+
+test('没有链接的文本原样返回，不能被吞成空 body（回归锚点）', async () => {
+    const res = await callWorker('今天天气不错，晚上吃火锅');
+    assert.equal(res.status, 200);
+    assert.equal(await res.text(), '今天天气不错，晚上吃火锅');
+});
+
 test('tb.cn 短链解析后保留商品 id', async (t) => {
     const stub = stubFetch({ 'https://m.tb.cn/h.fAwWH69': 'https://item.taobao.com/item.htm?spm=a1&id=67803651&skuId=5' });
     t.after(stub.restore);
