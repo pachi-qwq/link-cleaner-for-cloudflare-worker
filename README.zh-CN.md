@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Runtime](https://img.shields.io/badge/runtime-Cloudflare%20Workers-orange.svg)](https://workers.cloudflare.com/)
-[![Tests](https://img.shields.io/badge/tests-107%20passing-brightgreen.svg)](test/)
+[![Tests](https://img.shields.io/badge/tests-112%20passing-brightgreen.svg)](test/)
 [![Build](https://img.shields.io/badge/build-none-lightgrey.svg)](#单文件约束)
 
 把带追踪参数的分享链接清洗成干净链接的 Cloudflare Worker。粘贴一段分享文本，拿回同样的文本——
@@ -157,7 +157,7 @@ curl -s "https://link-cleaner.<你的子域>.workers.dev/clean?url=https%3A%2F%2
 
 | 站点 | 匹配域名 | 处理方式 |
 |---|---|---|
-| 哔哩哔哩 | `bilibili.com`、`b23.tv` | 短链解析为 `/video/BV…`；query 只保留 `p`、`t` |
+| 哔哩哔哩 | `bilibili.com`、`b23.tv` | 短链解析为 `/video/BV…`；query 只保留 `p`、`t`，并删掉它们的默认值（`p=1`、`t=0`） |
 | 拼多多 | `yangkeduo.com` | query 只保留 `goods_id` |
 | 淘宝 / 天猫 | `taobao.com`、`tmall.com` | query 只保留 `id` |
 | 淘宝短链 | `tb.cn`（含 `m.`、`e.`） | 解析为商品页后只保留 `id`；解析不到时回退读落地页里的 `var url='…'` |
@@ -231,7 +231,7 @@ curl -s "https://link-cleaner.<你的子域>.workers.dev/clean?url=https%3A%2F%2
 ## 测试
 
 ```bash
-npm test               # 107 条（纯函数单测 65 + 入口集成 42）
+npm test               # 112 条（纯函数单测 69 + 入口集成 43）
 npm run test:unit      # 只跑纯函数单测
 npm run test:integration
 npm run test:coverage  # Node 内置覆盖率（当前 index.js 行 91% / 分支 86% / 函数 100%）
@@ -245,23 +245,23 @@ npm run check          # wrangler 打包校验
 
 | 层 | 位置 | 测什么 | 数量 |
 |---|---|---|---|
-| 单测 | `test/unit/` | 纯函数边界：`parseUrls` / `stripQuery` / `stripTracking` / `keepForHost` / `readTarget` / `safeDecode` / `mapLimit` / `matchRule` / `cleanOne` | 65 |
-| 集成 | `test/integration/` | 走 `new Request(...)` 的完整契约：路由命中、短链展开（含 `HEAD→GET` 降级）、失败降级、并发与条数上限、编码/解码/错误码/响应头 | 42 |
+| 单测 | `test/unit/` | 纯函数边界：`parseUrls` / `stripQuery` / `stripTracking` / `keepForHost` / `readTarget` / `safeDecode` / `mapLimit` / `matchRule` / `cleanOne` | 69 |
+| 集成 | `test/integration/` | 走 `new Request(...)` 的完整契约：路由命中、短链展开（含 `HEAD→GET` 降级）、失败降级、并发与条数上限、编码/解码/错误码/响应头 | 43 |
 
 为此 `index.js` 末尾有一组**命名导出**（`export { parseUrls, … }`），只给测试用；Worker 只认
 `export default`，命名导出不影响部署产物。纯函数能单测，同时不违反单文件约束。
 
-覆盖率不设硬阈值，只做趋势观察。当前 `index.js`：行 93.8%、分支 87.4%、函数 100%。
+覆盖率不设硬阈值，只做趋势观察。当前 `index.js`：行 93.8%、分支 87.7%、函数 100%。
 已知无法覆盖的分支：`probeFinalUrl` 的真实网络失败、`taobaoCnUri` 的落地页兜底、入口的 500 兜底。
 
 ## 项目结构
 
 ```
 .
-├── index.js            # 唯一源码 + 唯一部署产物（567 行，5 个分节）
+├── index.js            # 唯一源码 + 唯一部署产物（599 行，5 个分节）
 ├── test/
-│   ├── unit/           # 纯函数单测（65 条）
-│   └── integration/    # 入口集成测试（42 条）
+│   ├── unit/           # 纯函数单测（69 条）
+│   └── integration/    # 入口集成测试（43 条）
 ├── test-support/       # 测试公共件与真实分享文本样例（不是测试文件）
 ├── package.json        # 只依赖 wrangler（devDependency）
 ├── wrangler.toml       # main = index.js，只打包不转换
@@ -290,7 +290,7 @@ npm run check          # wrangler 打包校验
 
 这是刻意的取舍：宁可让文件长一点，也不要为了"分层"引入打包步骤——它需要能在 Cloudflare
 在线编辑器里整段粘贴就能跑。`package.json` / `wrangler.toml` / `test/` 都是开发期资产，
-不进部署产物（打包体积 19.5 KiB / gzip 6.0 KiB，其中 7.3 KB 是 ClearURLs 规则数据）。
+不进部署产物（打包体积 20.2 KiB / gzip 6.1 KiB，其中 7.3 KB 是 ClearURLs 规则数据）。
 
 ## 已知限制与取舍
 

@@ -80,6 +80,13 @@ test('B站业务参数 p / t 必须保留', async () => {
     assert.equal(await res.text(), 'https://www.bilibili.com/video/BV1x?p=2&t=30');
 });
 
+test('B站默认值 p=1 / t=0 被删掉（短链展开后的常见形态）', async (t) => {
+    const stub = stubFetch({ 'https://b23.tv/uIFg3rx': 'https://www.bilibili.com/video/BV1Smpj69EWz/?p=1&share_source=copy' });
+    t.after(stub.restore);
+    const res = await callWorker('【标题】 https://b23.tv/uIFg3rx');
+    assert.equal(await res.text(), '【标题】 https://www.bilibili.com/video/BV1Smpj69EWz/');
+});
+
 // ---------- 004：短链解析 ----------
 
 test('douyin 短链解析成 video 直链（不依赖 Location 头）', async (t) => {

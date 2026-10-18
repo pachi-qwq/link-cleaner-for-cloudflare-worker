@@ -51,7 +51,7 @@ boundary, not a style choice.
 ```bash
 npm install
 npm run dev      # http://localhost:8787/?target=...
-npm test         # all 107 must pass before committing
+npm test         # all 112 must pass before committing
 npm run check    # bundle check (wrangler dry-run)
 ```
 
@@ -64,7 +64,7 @@ npm run check    # bundle check (wrangler dry-run)
 | `test/unit/` | `npm run test:unit` | Pure-function boundaries (`stripQuery` with null/invalid URL/duplicate keys, `readTarget` with `&`/`#`, `mapLimit` ordering and concurrency) |
 | `test/integration/` | `npm run test:integration` | The full contract through `new Request(...)`; one case per real share text |
 | `test-support/` | — | `helpers.mjs` (`callWorker` / `callRaw` / `stubFetch`) and `fixtures.mjs`. **Do not** put these under `test/` — the test runner would execute them as test files |
-| Everything | `npm test` | All of the above (107) |
+| Everything | `npm test` | All of the above (112) |
 | Coverage | `npm run test:coverage` | Node's built-in coverage, no dependencies |
 
 Pure functions are unit-testable because `index.js` ends with a group of **named exports used only by
@@ -79,7 +79,7 @@ export { parseUrls, stripQuery, stripTracking, isTrackingKey, keepForHost, hostO
 Workers only care about `export default`, so these do not affect the deployed artifact.
 **Every export needs a test**, otherwise remove it — this is a testing surface, not a public API.
 
-Coverage baseline (`npm run test:coverage`, 2026-10-18): `index.js` 93.8% lines, 87.4% branches,
+Coverage baseline (`npm run test:coverage`, 2026-10-18): `index.js` 93.8% lines, 87.7% branches,
 100% functions. A PR should not lower it noticeably; there is no hard threshold. Known-unreachable
 branches: real network failures in `probeFinalUrl`, the landing-page fallback in `taobaoCnUri`, and
 the entry point's 500 catch-all.
@@ -109,7 +109,7 @@ One commit does one thing; do not bundle unrelated changes.
 - [ ] `npm test` is green and new behaviour has cases
 - [ ] `index.js` still has no `import` / `require` and is still paste-and-run
 - [ ] `npx wrangler deploy --dry-run` passes and the bundle has not grown noticeably
-      (currently ~19.5 KiB / 6.0 KiB gzipped, including 7.3 KB of rules data)
+      (currently ~20.2 KiB / 6.1 KiB gzipped, including 7.3 KB of rules data)
 - [ ] Host rules use dot-boundary suffix matching
 - [ ] New query keys went to the right place: business params → `KEEP_PARAMS`, tracking params →
       `TRACKING_*`

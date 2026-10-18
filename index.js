@@ -18,6 +18,11 @@ const KEEP_PARAMS = {
     'bilibili.com': ['p', 't'],   // p=分P，t=起播秒数，都不是追踪参数
 };
 
+// 白名单里的键也可能带着「默认值」——p=1 是第一P、t=0 是开头，URL 里带着纯属噪音。
+const DEFAULT_PARAMS = {
+    'bilibili.com': {p: '1', t: '0'},
+};
+
 // 未知站点只删这些键，其余保留。宁可漏删，不要误删——删错的代价是死链。
 const TRACKING_EXACT = new Set([
     // 国内平台
@@ -201,6 +206,33 @@ const hostOf = (url) => {
     }
 };
 
+// 去掉白名单参数里的默认值（p=1 / t=0），其余一律不动
+const stripDefaultParams = (url) => {
+    const host = hostOf(url);
+    const domain = Object.keys(DEFAULT_PARAMS).find(
+        (d) => host === d || host.endsWith('.' + d)
+    );
+    if (!domain) {
+        return url;
+    }
+    let u;
+    try {
+        u = new URL(url);
+    } catch (err) {
+        return url;
+    }
+    if (!u.search) {
+        return url;
+    }
+    const defaults = DEFAULT_PARAMS[domain];
+    for (const key of [...u.searchParams.keys()]) {
+        if (defaults[key] !== undefined && u.searchParams.get(key) === defaults[key]) {
+            u.searchParams.delete(key);
+        }
+    }
+    return u.toString();
+};
+
 const keepForHost = (host) => {
     const hit = Object.keys(KEEP_PARAMS).find(
         (domain) => host === domain || host.endsWith('.' + domain)
@@ -364,7 +396,7 @@ const readTarget = (urlString) => readParam(urlString, 'target');
 const biliUri = async (url) => {
     const finalUrl = url.includes('b23.tv') ? await probeFinalUrl(url) : url;
     const target = finalUrl || url;
-    return stripQuery(target, keepForHost(hostOf(target)));
+    return stripDefaultParams(stripQuery(target, keepForHost(hostOf(target))));
 }
 
 // 淘宝 / 天猫长链：必需参数是 id
@@ -563,5 +595,5 @@ export default {
 export {
     parseUrls, stripQuery, stripTracking, isTrackingKey, keepForHost, hostOf,
     safeDecode, readParam, readTarget, mapLimit, matchRule, cleanOne,
-    compileClearUrls, stripByProviderRules,
+    compileClearUrls, stripByProviderRules, stripDefaultParams,
 };

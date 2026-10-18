@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     parseUrls, stripQuery, stripTracking, isTrackingKey, hostOf,
-    keepForHost, safeDecode, readParam, readTarget, mapLimit,
+    keepForHost, safeDecode, readParam, readTarget, mapLimit, stripDefaultParams,
 } from '../../index.js';
 
 describe('parseUrls', () => {
@@ -190,6 +190,30 @@ describe('readParam', () => {
     it('不存在时返回空串', () => {
         assert.equal(readParam('https://w.dev/?other=1', 'url'), '');
         assert.equal(readParam('https://w.dev/', 'url'), '');
+    });
+});
+
+describe('stripDefaultParams', () => {
+    it('删掉 bilibili 的默认值 p=1 / t=0', () => {
+        assert.equal(stripDefaultParams('https://www.bilibili.com/video/BV1/?p=1'), 'https://www.bilibili.com/video/BV1/');
+        assert.equal(stripDefaultParams('https://www.bilibili.com/video/BV1/?t=0'), 'https://www.bilibili.com/video/BV1/');
+        assert.equal(stripDefaultParams('https://www.bilibili.com/video/BV1/?p=1&t=0&share_source=x'),
+            'https://www.bilibili.com/video/BV1/?share_source=x');
+    });
+
+    it('非默认值必须保留（p=2 / t=30）', () => {
+        assert.equal(stripDefaultParams('https://www.bilibili.com/video/BV1/?p=2&t=30'),
+            'https://www.bilibili.com/video/BV1/?p=2&t=30');
+    });
+
+    it('其它站点一律不动', () => {
+        assert.equal(stripDefaultParams('https://item.taobao.com/item.htm?id=1&p=1'),
+            'https://item.taobao.com/item.htm?id=1&p=1');
+    });
+
+    it('没有 query 或非法 URL 原样返回', () => {
+        assert.equal(stripDefaultParams('https://www.bilibili.com/video/BV1/'), 'https://www.bilibili.com/video/BV1/');
+        assert.equal(stripDefaultParams('https://[::1/x'), 'https://[::1/x');
     });
 });
 

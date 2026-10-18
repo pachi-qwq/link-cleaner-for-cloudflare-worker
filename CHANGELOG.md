@@ -8,7 +8,12 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
-(Nothing yet)
+### Changed
+
+- **Bilibili default parameters are dropped**: `p=1` (first part) and `t=0` (play from the
+  start) are defaults, so keeping them only added noise — e.g.
+  `https://www.bilibili.com/video/BV1Smpj69EWz/?p=1` now becomes `…/BV1Smpj69EWz/`.
+  Non-default values (`p=2`, `t=90`) are still preserved.
 
 ## [0.3.0] - 2026-10-18
 
