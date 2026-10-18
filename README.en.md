@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Runtime](https://img.shields.io/badge/runtime-Cloudflare%20Workers-orange.svg)](https://workers.cloudflare.com/)
-[![Tests](https://img.shields.io/badge/tests-105%20passing-brightgreen.svg)](test/)
+[![Tests](https://img.shields.io/badge/tests-107%20passing-brightgreen.svg)](test/)
 [![Build](https://img.shields.io/badge/build-none-lightgrey.svg)](#single-file-constraint)
 
 A Cloudflare Worker that scrubs tracking parameters from shared links. Paste a share text, get the
@@ -105,7 +105,7 @@ Methods: `GET` / `HEAD` are processed, `OPTIONS` returns a 204 preflight, anythi
 
 | Case | Status | Headers | Body |
 |---|---|---|---|
-| OK | `200` | `content-type: text/plain; charset=utf-8`<br>`cache-control: no-store`<br>`access-control-allow-origin: *` | Cleaned text |
+| OK | `200` | `content-type: text/plain; charset=utf-8`<br>`cache-control: no-store`<br>`access-control-allow-origin: *`<br>`x-content-type-options: nosniff` | Cleaned text |
 | Missing `?target=` | `400` | same | `缺少 target 参数。用法：/?target=<分享文本>` |
 | Method not allowed | `405` | same + `allow: GET, HEAD, OPTIONS` | `只支持 GET` |
 | Uncaught error | `500` | same | `内部错误` |
@@ -186,6 +186,11 @@ Exact keys: `spm`, `scm`, `vd_source`, `from_source`, `refer`, `unique_k`, `bbk`
 `pxq_secret_key`, `isappinstalled`, `_x_org`, `xsec_source`, `xsec_source_type`, `scene`,
 `srcid`, `timestamp`, `t`
 
+Plus a set of **global click/ad tracking IDs** (same names as ClearURLs' `globalRules`):
+`gclid`, `dclid`, `gbraid`, `wbraid`, `fbclid`, `msclkid`, `yclid`, `twclid`, `igshid`, `_openstat`,
+`_ga`, `_gl`, `mc_cid`, `mc_eid`, `mkt_tok`, `srsltid`, `vero_id`, `rb_clickid`, `s_cid`, `hmb_*`,
+`itm_*` and more — these are removed on **any** site.
+
 ## How it works
 
 ### Pipeline
@@ -237,7 +242,7 @@ These cost real debugging time during the port — recorded so nobody rediscover
 ## Testing
 
 ```bash
-npm test               # 105 (64 unit + 41 integration)
+npm test               # 107 (65 unit + 42 integration)
 npm run test:unit      # pure-function unit tests only
 npm run test:integration
 npm run test:coverage  # Node's built-in coverage (index.js: 91% lines / 86% branches / 100% funcs)
@@ -251,14 +256,14 @@ Two layers:
 
 | Layer | Location | What it covers | Count |
 |---|---|---|---|
-| Unit | `test/unit/` | Pure-function boundaries: `parseUrls` / `stripQuery` / `stripTracking` / `keepForHost` / `readTarget` / `safeDecode` / `mapLimit` / `matchRule` / `cleanOne` | 64 |
-| Integration | `test/integration/` | The full contract through `new Request(...)`: routing, short-link expansion (incl. the `HEAD→GET` fallback), failure isolation, limits, encoding/decoding, status codes, headers | 41 |
+| Unit | `test/unit/` | Pure-function boundaries: `parseUrls` / `stripQuery` / `stripTracking` / `keepForHost` / `readTarget` / `safeDecode` / `mapLimit` / `matchRule` / `cleanOne` | 65 |
+| Integration | `test/integration/` | The full contract through `new Request(...)`: routing, short-link expansion (incl. the `HEAD→GET` fallback), failure isolation, limits, encoding/decoding, status codes, headers | 42 |
 
 To enable this, `index.js` ends with a group of **named exports** (`export { parseUrls, … }`) used only
 by tests. Workers only care about `export default`, so the named exports do not affect the deployed
 artifact — unit-testing pure functions without breaking the single-file constraint.
 
-Coverage is tracked, not enforced. `index.js` currently sits at 93.7% lines, 87.0% branches, 100%
+Coverage is tracked, not enforced. `index.js` currently sits at 93.8% lines, 87.4% branches, 100%
 functions. Known-uncoverable branches: real network failures in `probeFinalUrl`, the landing-page
 fallback in `taobaoCnUri`, and the entry point's 500 catch-all.
 
@@ -266,10 +271,10 @@ fallback in `taobaoCnUri`, and the entry point's 500 catch-all.
 
 ```
 .
-├── index.js            # the only source file and the only deployable artifact (555 lines, 5 sections)
+├── index.js            # the only source file and the only deployable artifact (567 lines, 5 sections)
 ├── test/
-│   ├── unit/           # pure-function unit tests (64)
-│   └── integration/    # entry-level integration tests (41)
+│   ├── unit/           # pure-function unit tests (65)
+│   └── integration/    # entry-level integration tests (42)
 ├── test-support/       # shared helpers and real share-text fixtures (not test files)
 ├── package.json        # wrangler as the only devDependency
 ├── wrangler.toml       # main = index.js, bundling only, no transforms
@@ -295,7 +300,7 @@ no build step**. Internally it is organised by five section comments:
 
 This is a deliberate trade-off: a longer file beats a build pipeline, because it must stay
 paste-and-run in the Cloudflare dashboard editor. `package.json` / `wrangler.toml` / `test/` are
-development-time assets that never reach the bundle (18.7 KiB total, 5.7 KiB gzipped - 7.3 KB of that is the ClearURLs ruleset).
+development-time assets that never reach the bundle (19.5 KiB total, 6.0 KiB gzipped - 7.3 KB of that is the ClearURLs ruleset).
 
 ## Known limitations
 

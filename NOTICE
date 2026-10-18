@@ -11,6 +11,9 @@
 该数据块按 LGPL-3.0 使用与分发，不适用本项目的 MIT 许可。
 本项目**未使用** ClearURLs 的源代码，只使用了其规则数据（JSON 快照，2026-10-18）。
 
+另外，`TRACKING_EXACT` 中一批全局点击 / 广告追踪键名（`gclid`、`fbclid`、`msclkid` 等）
+同样取自该项目的 `globalRules` 名单，许可归属同上。
+
 如需完全移除该数据，删除 `CLEARURLS_PROVIDERS` 常量、`compileClearUrls()` 与
 `stripByProviderRules()` 中对它的引用，并把 `cleanOne` 的未命中分支改回 `stripTracking(url)` 即可——
 之后本项目只保留自写的追踪键黑名单。

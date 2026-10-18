@@ -5,38 +5,51 @@
 
 ## [Unreleased]
 
+（无）
+
+## [0.3.0] - 2026-10-18
+
 ### 新增
 
 - **内联 27 个高频站点的追踪参数规则**（ClearURLs Rules 精选：微博 / 搜狐 / 优酷 / TikTok /
   YouTube / X / Reddit / Amazon / eBay / Google 等）。命中 provider 时按它的 `rules` 删参数，
   并**叠加**本项目自己的追踪键黑名单；未命中 provider 仍走原黑名单。数据取自上游 JSON 快照
-  （2026-10-18），按 LGPL-3.0 使用，见新增的 `NOTICE`。单文件 325 → 555 行，
-  打包体积 9.2 → 18.7 KiB（gzip 3.1 → 5.7）。
+  （2026-10-18），按 LGPL-3.0 使用，见新增的 `NOTICE`。单文件 325 → 567 行，
+  打包体积 9.2 → 19.5 KiB（gzip 3.1 → 6.0）。
 - **`/clean?url=` 单链接 JSON 接口**：返回 `input` / `output` / `host` / `rule` / `changed`，
   缺参、非法 URL、非 http(s) 分别返回 400 并带 `error` 码。与文本接口共用 `cleanOne`，
   并有专门用例保证「两条接口对同一链接输出一致」。实现上把 `readTarget` 泛化成 `readParam`。
 
 ### 修复
 
+- **provider 例外吞掉了通用黑名单**：命中 ClearURLs 某 provider 的 `exceptions` 时直接返回原文，
+  连 `utm_*` / `gclid` 都没删。改为「例外只豁免该 provider 的规则，通用黑名单照常生效」，
+  与 ClearURLs 的 `globalRules` 语义对齐。
+- **缺一批全局点击 ID**：`TRACKING_EXACT` 里没有 `gclid` / `fbclid` / `msclkid` / `yclid` /
+  `igshid` 等最常见的广告追踪键，导致任意站点上的这些参数都活下来了。已按 ClearURLs 的
+  `globalRules` 补 40 余个键名。
+- **`completeProvider` 是死分支**：精选的 27 个 provider 里一个都不用该字段，运行时代码已删除，
+  数据块注释里说明原因。
 - **没有链接的文本被吞成空 body**：`process` 在文本里找不到链接时返回空串，用户粘一段纯文字
   会拿回 `200 ""`。改为原样返回文本。
-- **抖音主页链接被伪造成视频地址**：解析兜底使用 `/(\d{6,})/` 抓任意数字段，
-  `v.douyin.com` 跳转到 `/share/user/<uid>/` 时会生成一个 404 的 `www.douyin.com/video/<uid>`。
-  改为先校验最终地址属于抖音域名，且路径必须匹配 `/(share/)?video/<id>`。
+- **抖音主页链接被伪造成视频地址**：解析兜底用 `/(\d{6,})/` 抓任意数字段，`v.douyin.com`
+  跳转到 `/share/user/<uid>/` 时会生成一个 404 的 `www.douyin.com/video/<uid>`；改为先校验
+  最终地址属于抖音域名，且路径必须匹配 `/(share/)?video/<id>`。
+
+### 变更
+
+- 响应头加 `x-content-type-options: nosniff`（`/clean` 会把用户输入原样放进 JSON）。
+- 日志不再打印完整 URL，只打印 host（`probe failed` 那一条）——这是隐私工具，日志里不该留
+  用户链接。
 
 ### 测试
 
-- **测试拆成两层**：`test/unit/`（46 条，纯函数边界）与 `test/integration/`（32 条，入口契约），
-  共 78 条。为此在 `index.js` 末尾加了只给测试用的命名导出；Worker 只认 `default` 导出，
-  部署产物只增加约 0.2 KiB。
+- 测试拆成两层：`test/unit/`（纯函数边界）与 `test/integration/`（入口契约），当前共 107 条
+  （65 + 42）。为此在 `index.js` 末尾加了只给测试用的命名导出；Worker 只认 `default` 导出。
 - `parseUrls` 改用 `matchAll`，不再依赖模块级 `/g` 正则的 `lastIndex` 状态。
 - 新增 `npm run test:unit` / `test:integration` / `test:coverage`（Node 内置覆盖率，零依赖）。
 - 测试公共件与真实分享文本样例抽到 `test-support/`（该目录不会被 test runner 当作用例）。
 
-### 变更
-
-- 日志不再打印完整 URL，只打印 host（`probe failed` 那一条）——这是隐私工具，日志里不该留
-  用户链接。
 
 ## [0.2.0] - 2026-10-18
 
