@@ -50,9 +50,10 @@ test('裸域 jd.com 不再抛异常（002 修 ReferenceError）', async () => {
     assert.equal(await res.text(), 'https://jd.com/10001058.html');
 });
 
-test('evil-bilibili.com 不被误认为 bilibili', async () => {
-    const res = await callWorker('https://evil-bilibili.com/video/BV1?share_source=x');
-    assert.equal(await res.text(), 'https://evil-bilibili.com/video/BV1?share_source=x');
+test('点边界：evil-bilibili.com 不走 bilibili handler', async () => {
+    // 若被误判为 bilibili，?foo=1 会被 keep 白名单删掉；走通用黑名单则原样保留
+    const res = await callWorker('https://evil-bilibili.com/video/BV1?foo=1');
+    assert.equal(await res.text(), 'https://evil-bilibili.com/video/BV1?foo=1');
 });
 
 // ---------- 003：参数清洗 ----------
@@ -147,4 +148,33 @@ test('30 条链接：最多 20 个子请求，并发不超过 5', async (t) => {
     await callWorker(text);
     assert.equal(total, 20);
     assert.ok(peak <= 5, 'peak concurrency ' + peak);
+});
+
+// ---------- 005：通用去参与小红书 ----------
+
+test('未知站点：删追踪键，保留业务参数', async () => {
+    const res = await callWorker('看这个 https://www.example.com/123.html?u=1&utm_source=wx&utm_medium=share');
+    assert.equal(await res.text(), '看这个 https://www.example.com/123.html?u=1');
+});
+
+test('未知站点：只有追踪键时不留悬空问号', async () => {
+    const res = await callWorker('https://www.example.com/x?utm_source=wx');
+    assert.equal(await res.text(), 'https://www.example.com/x');
+});
+
+test('业务参数 ?v= 绝不能被删（防通用分支变死链）', async () => {
+    const res = await callWorker('https://www.youtube.com/watch?v=abc123&utm_source=wx&share_source=copy');
+    assert.equal(await res.text(), 'https://www.youtube.com/watch?v=abc123');
+});
+
+test('小红书 web 链接只留 xsec_token', async () => {
+    const res = await callWorker('https://www.xiaohongshu.com/discovery/item/66f1a2b3?xsec_token=ABxyz123&xsec_source=pc_share&share_from_user_hidden=true');
+    assert.equal(await res.text(), 'https://www.xiaohongshu.com/discovery/item/66f1a2b3?xsec_token=ABxyz123');
+});
+
+test('小红书短链解析后同样保留 xsec_token', async (t) => {
+    const stub = stubFetch({ 'https://xhslink.com/a/abcDEF': 'https://www.xiaohongshu.com/discovery/item/66f1a2b3?xsec_token=ABxyz&xsec_source=pc_share' });
+    t.after(stub.restore);
+    const res = await callWorker('https://xhslink.com/a/abcDEF');
+    assert.equal(await res.text(), 'https://www.xiaohongshu.com/discovery/item/66f1a2b3?xsec_token=ABxyz');
 });

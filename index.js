@@ -18,6 +18,17 @@ const KEEP_PARAMS = {
     'bilibili.com': ['p', 't'],   // p=分P，t=起播秒数，都不是追踪参数
 };
 
+// 未知站点只删这些键，其余保留。宁可漏删，不要误删——删错的代价是死链。
+const TRACKING_EXACT = new Set([
+    'spm', 'scm', 'vd_source', 'from_source', 'refer', 'unique_k', 'bbk',
+    'refer_share_id', 'refer_share_channel', 'refer_share_uin', 'share_uin',
+    'share_plat', 'share_session_id', 'share_tag', 'share_medium', 'share_source',
+    'share_from_user_hidden', 'page_from', 'pxq_secret_key', 'isappinstalled',
+    '_x_org', 'xsec_source', 'xsec_source_type', 'scene', 'srcid', 'timestamp', 't',
+]);
+const TRACKING_PREFIX = ['utm_', 'share_', '_wv'];
+
+
 // ========== 2. UTILS：纯函数工具 ==========
 const parseUrls = (inputText) => {
     let urls = [];
@@ -105,6 +116,31 @@ const mapLimit = async (items, limit, fn) => {
     return out;
 };
 
+const isTrackingKey = (key) => TRACKING_EXACT.has(key)
+    || TRACKING_PREFIX.some((prefix) => key.startsWith(prefix));
+
+// 通用站点：只删追踪键。没有 query 时原样返回，避免 URL 正规化改写原文。
+const stripTracking = (url) => {
+    if (typeof url !== 'string' || url === '') {
+        return '';
+    }
+    let u;
+    try {
+        u = new URL(url);
+    } catch (err) {
+        return url;
+    }
+    if (!u.search) {
+        return url;
+    }
+    for (const key of [...u.searchParams.keys()]) {
+        if (isTrackingKey(key)) {
+            u.searchParams.delete(key);
+        }
+    }
+    return u.toString();
+};
+
 const getUrlParams = (url) => {
     const origin = url.split('?')[0]
     return url.split(`${origin}?target=`)[1]
@@ -159,11 +195,14 @@ const douyinUri = async (url) => {
     return match ? 'https://www.douyin.com/video/' + match[1] : url;
 }
 
+// 小红书：xsec_token 是必需参数（缺它微信里打不开笔记），其余全部丢掉
 const xiaohongshuUri = async (url) => {
-    // 短链先解析成最终地址；xsec_token 的保留逻辑见 005
     const finalUrl = url.includes('xhslink.com') ? await probeFinalUrl(url) : url;
     const target = finalUrl || url;
-    return stripQuery(target);
+    if (!/xiaohongshu\.com/i.test(target)) {
+        return stripTracking(target);
+    }
+    return stripQuery(target, ['xsec_token']);
 }
 // ========== 4. ROUTER：host → handler ==========
 // 匹配规则是「相等或点边界后缀」：www./item./m./v. 等子域都能命中，
@@ -197,7 +236,7 @@ const cleanOne = async (url) => {
     }
     const rule = matchRule(host);
     if (!rule) {
-        return url;
+        return stripTracking(url);
     }
     try {
         return await rule.handler(url);
