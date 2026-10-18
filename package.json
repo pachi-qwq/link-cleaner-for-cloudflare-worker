@@ -1,6 +1,6 @@
 {
   "name": "link-cleaner-for-cloudflare-worker",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "URL 清洗 Worker：输入分享文本，输出去掉追踪参数的链接",
