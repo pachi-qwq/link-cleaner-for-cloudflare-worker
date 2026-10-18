@@ -5,6 +5,14 @@ const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
 
 const COMMON_FETCH_PARAMS = {method: 'HEAD', timeout: 20000}
 
+// 各站点清洗时必须保留的 query 键。不在表里的站点表示「一个 query 都不需要」。
+const KEEP_PARAMS = {
+    'yangkeduo.com': ['goods_id'],
+    'taobao.com': ['id'],
+    'tmall.com': ['id'],
+    'bilibili.com': ['p', 't'],   // p=分P，t=起播秒数，都不是追踪参数
+};
+
 // ========== 2. UTILS：纯函数工具 ==========
 const parseUrls = (inputText) => {
     let urls = [];
@@ -17,13 +25,45 @@ const parseUrls = (inputText) => {
     return urls;
 }
 
-const removeParams = (uri) => {
-    if ((uri ?? '') === '') {
-        return ''
+// 只删 query，保留 fragment；没有 query 时原样返回（避免 URL 正规化带来的多余改写）。
+const stripQuery = (url, keep = []) => {
+    if (typeof url !== 'string' || url === '') {
+        return '';
     }
-    const split = uri.split("?");
-    return split[0];
-}
+    let u;
+    try {
+        u = new URL(url);
+    } catch (err) {
+        return url;
+    }
+    if (!u.search) {
+        return url;
+    }
+    for (const key of [...u.searchParams.keys()]) {
+        if (!keep.includes(key)) {
+            u.searchParams.delete(key);
+        }
+    }
+    return u.toString();
+};
+
+const hostOf = (url) => {
+    try {
+        return new URL(url).hostname;
+    } catch (err) {
+        return '';
+    }
+};
+
+const keepForHost = (host) => {
+    const hit = Object.keys(KEEP_PARAMS).find(
+        (domain) => host === domain || host.endsWith('.' + domain)
+    );
+    return hit ? KEEP_PARAMS[hit] : [];
+};
+
+// 保留这个名字：语义 = 删掉全部 query（null/'' 返回 ''）
+const removeParams = (uri) => stripQuery(uri ?? '');
 
 const getUrlParams = (url) => {
     const origin = url.split('?')[0]
@@ -33,33 +73,15 @@ const getUrlParams = (url) => {
 // ========== 3. HANDLERS：单站点处理 ==========
 const biliUri = async (url) => {
     let uri = url;
-    const httpsIndex = uri.indexOf("https");
-    const text = uri.substring(0, httpsIndex);
-    uri = uri.substring(httpsIndex);
-    if (uri.includes("b23.tv")) {
+    if (uri.includes('b23.tv')) {
         const resp = await fetch(uri, COMMON_FETCH_PARAMS);
-        uri = resp.url;
+        uri = resp.url || uri;
     }
-    return (text.length === 0 ? "" : (text + " ")) + removeParams(uri);
+    return stripQuery(uri, keepForHost(hostOf(uri)));
 }
 
-const taobaoComUri = async (url) => {
-    let uri = url;
-    const split = uri.split("&");
-    if (split.length === 1) {
-        return split[0];
-    }
-    const id = uri.split("?");
-    let param = "";
-    for (let i = 0; i < split.length; i++) {
-        const item = split[i];
-        if (item.startsWith("id") && item.includes("id=")) {
-            param = item;
-            break;
-        }
-    }
-    return id[0].concat("?").concat(param);
-}
+// 淘宝 / 天猫长链：必需参数是 id
+const taobaoComUri = async (url) => stripQuery(url, keepForHost(hostOf(url)));
 
 const taobaoCnUri = async (url) => {
     let uri = decodeURIComponent(url);
@@ -81,24 +103,8 @@ const taobaoCnUri = async (url) => {
     return `${goodName} ${await taobaoComUri(uri)}`;
 }
 
-const pddGoodsUri = async (url) => {
-    const split = url.split("&");
-    const goods = url.split("?");
-    let param = "";
-
-    if (split.length === 1) {
-        return split[0];
-    }
-
-    for (let i = 0; i < split.length; i++) {
-        let item = split[i];
-        if (item.startsWith("goods") && item.includes("goods_id=")) {
-            param = item;
-            break;
-        }
-    }
-    return goods[0].concat("?").concat(param);
-}
+// 拼多多：必需参数是 goods_id
+const pddGoodsUri = async (url) => stripQuery(url, keepForHost(hostOf(url)));
 
 const jdUri = async (url) => removeParams(url);
 

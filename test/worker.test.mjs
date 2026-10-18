@@ -54,3 +54,35 @@ test('evil-bilibili.com 不被误认为 bilibili', async () => {
     const res = await callWorker('https://evil-bilibili.com/video/BV1?share_source=x');
     assert.equal(await res.text(), 'https://evil-bilibili.com/video/BV1?share_source=x');
 });
+
+// ---------- 003：参数清洗 ----------
+
+test('pdd：goods_id 不在首位也不丢', async () => {
+    const res = await callWorker('https://mobile.yangkeduo.com/goods.html?_x_org=2&goods_id=28707795&pxq_secret_key=VGKR');
+    assert.equal(await res.text(), 'https://mobile.yangkeduo.com/goods.html?goods_id=28707795');
+});
+
+test('淘宝：id 不在首位也不丢，不再留悬空问号', async () => {
+    const res = await callWorker('https://item.taobao.com/item.htm?spm=a1z10.3&id=67803651&skuId=55285');
+    assert.equal(await res.text(), 'https://item.taobao.com/item.htm?id=67803651');
+});
+
+test('没有 query 的链接一个字符都不改', async () => {
+    const res = await callWorker('https://item.taobao.com/item.htm');
+    assert.equal(await res.text(), 'https://item.taobao.com/item.htm');
+});
+
+test('必需参数缺失时不悬空问号，fragment 保留', async () => {
+    const res = await callWorker('https://mobile.yangkeduo.com/goods.html?a=1#reviews');
+    assert.equal(await res.text(), 'https://mobile.yangkeduo.com/goods.html#reviews');
+});
+
+test('京东删掉全部 query，路径不动', async () => {
+    const res = await callWorker('https://item.jd.com/10001058.html?utm_source=iosapp&ad_od=share');
+    assert.equal(await res.text(), 'https://item.jd.com/10001058.html');
+});
+
+test('B站业务参数 p / t 必须保留', async () => {
+    const res = await callWorker('https://www.bilibili.com/video/BV1x?p=2&t=30&share_source=copy');
+    assert.equal(await res.text(), 'https://www.bilibili.com/video/BV1x?p=2&t=30');
+});
