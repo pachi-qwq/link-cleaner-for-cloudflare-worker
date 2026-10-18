@@ -31,14 +31,11 @@ const TRACKING_PREFIX = ['utm_', 'share_', '_wv'];
 
 // ========== 2. UTILS：纯函数工具 ==========
 const parseUrls = (inputText) => {
-    let urls = [];
-    let match;
-    // Find all URLs in the input text
-    while ((match = URL_REGEX.exec(inputText)) !== null) {
-        urls.push(match[0]);
+    if (typeof inputText !== 'string' || inputText === '') {
+        return [];
     }
-
-    return urls;
+    // matchAll 每次都用新的迭代器，不依赖正则的 lastIndex 状态
+    return [...inputText.matchAll(URL_REGEX)].map((match) => match[0]);
 }
 
 // 只删 query，保留 fragment；没有 query 时原样返回（避免 URL 正规化带来的多余改写）。
@@ -97,7 +94,7 @@ const probeFinalUrl = async (url) => {
         }
         return resp.url || '';
     } catch (err) {
-        console.warn('probe failed', url, err && err.message);
+        console.warn('probe failed', hostOf(url) || '(unparsable)', err && err.message);
         return '';
     }
 };
@@ -327,4 +324,10 @@ export default {
             return textResponse('内部错误', 500);
         }
     },
+};
+
+// 仅供测试：Worker 只认 default 导出，这些命名导出不进运行时路径。
+export {
+    parseUrls, stripQuery, stripTracking, isTrackingKey, keepForHost, hostOf,
+    safeDecode, readTarget, mapLimit, matchRule, cleanOne,
 };
