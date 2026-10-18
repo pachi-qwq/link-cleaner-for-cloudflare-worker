@@ -1,7 +1,7 @@
 // ========== 1. CONFIG：常量、站点规则表、限额 ==========
 // 单文件约束：本文件是唯一源码，也是唯一部署产物。不要拆模块、不要 import、不要构建步骤。
 
-const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
 
 const COMMON_FETCH_PARAMS = {method: 'HEAD', timeout: 20000}
 
@@ -100,9 +100,7 @@ const pddGoodsUri = async (url) => {
     return goods[0].concat("?").concat(param);
 }
 
-const jdUri = async (url) => {
-    return removeParams(uri)
-}
+const jdUri = async (url) => removeParams(url);
 
 const douyinUri = async (url) => {
     const uri = url;
@@ -153,17 +151,46 @@ const xiaohongshuUri = async (url) => {
 }
 
 // ========== 4. ROUTER：host → handler ==========
-const URL_PROCESS0R = new Map();
-URL_PROCESS0R.set('yangkeduo.com', pddGoodsUri);
-URL_PROCESS0R.set('mobile.yangkeduo.com', pddGoodsUri);
-URL_PROCESS0R.set('jd.com', jdUri);
-URL_PROCESS0R.set('taobao.com', taobaoComUri);
-URL_PROCESS0R.set('tb.cn', taobaoCnUri);
-URL_PROCESS0R.set('m.tb.cn', taobaoCnUri);
-URL_PROCESS0R.set('bilibili.com', biliUri);
-URL_PROCESS0R.set('b23.tv', biliUri);
-URL_PROCESS0R.set('douyin.com', douyinUri);
-URL_PROCESS0R.set('xhslink.com', xiaohongshuUri);
+// 匹配规则是「相等或点边界后缀」：www./item./m./v. 等子域都能命中，
+// 而 evil-bilibili.com 不会误命中（点边界是安全边界，不是风格问题）。
+const SITE_RULES = [
+    {domain: 'b23.tv', handler: biliUri},
+    {domain: 'bilibili.com', handler: biliUri},
+    {domain: 'yangkeduo.com', handler: pddGoodsUri},
+    {domain: 'jd.com', handler: jdUri},
+    {domain: 'tb.cn', handler: taobaoCnUri},
+    {domain: 'taobao.com', handler: taobaoComUri},
+    {domain: 'tmall.com', handler: taobaoComUri},
+    {domain: 'douyin.com', handler: douyinUri},
+    {domain: 'iesdouyin.com', handler: douyinUri},
+    {domain: 'xiaohongshu.com', handler: xiaohongshuUri},
+    {domain: 'xhslink.com', handler: xiaohongshuUri},
+];
+
+const matchRule = (host) => SITE_RULES.find(
+    (rule) => host === rule.domain || host.endsWith('.' + rule.domain)
+);
+
+// 单个链接的清洗：解析不了就原样放过；handler 抛错也只降级这一条，
+// 不能让一个坏链接把整段文本打成 CF 1101。
+const cleanOne = async (url) => {
+    let host;
+    try {
+        host = new URL(url).hostname;
+    } catch (err) {
+        return url;
+    }
+    const rule = matchRule(host);
+    if (!rule) {
+        return url;
+    }
+    try {
+        return await rule.handler(url);
+    } catch (err) {
+        console.warn('handler failed', host, err && err.message);
+        return url;
+    }
+};
 
 const process = async (url) => {
     if ((url ?? '') === '') {
@@ -178,17 +205,7 @@ const process = async (url) => {
     if (urls == null || urls.length === 0) {
         return '';
     }
-    const processedUrls = await Promise.all(
-        urls.map(async (e) => {
-            const domain = new URL(e).hostname;
-            const fun = URL_PROCESS0R.get(domain);
-            if (typeof fun === 'function') {
-                return await fun(e);
-            } else {
-                return e;
-            }
-        })
-    )
+    const processedUrls = await Promise.all(urls.map(cleanOne));
     return target.replace(URL_REGEX, () => (processedUrls.shift()));
 }
 

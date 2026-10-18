@@ -29,10 +29,28 @@ test('b23 短链解析（唯一当前可用路径，作为回归锚点）', asyn
     assert.equal(await res.text(), '【标题】 https://www.bilibili.com/video/BV1M4411q7W8');
 });
 
-test('已知缺陷锚点：jd 链接抛 ReferenceError（002 修）', async () => {
-    await assert.rejects(callWorker('https://jd.com/10001058.html?utm_source=x'), /uri is not defined/);
-});
-
 test('已知缺陷锚点：百分比文本抛 URIError（006 修）', async () => {
     await assert.rejects(callWorker('全场 50% off https://b23.tv/GUOxxxx'), /URI malformed/);
+});
+
+// ---------- 002：路由 ----------
+
+test('子域命中：www.bilibili.com 长链去掉追踪参数', async () => {
+    const res = await callWorker('【何同学】 https://www.bilibili.com/video/BV1W14y1b7Mq?share_source=copy_web&vd_source=f3e3');
+    assert.equal(await res.text(), '【何同学】 https://www.bilibili.com/video/BV1W14y1b7Mq');
+});
+
+test('子域命中：item.m.jd.com 去掉全部 query', async () => {
+    const res = await callWorker('https://item.m.jd.com/product/10001058.html?utm_source=iosapp&ad_od=share');
+    assert.equal(await res.text(), 'https://item.m.jd.com/product/10001058.html');
+});
+
+test('裸域 jd.com 不再抛异常（002 修 ReferenceError）', async () => {
+    const res = await callWorker('https://jd.com/10001058.html?utm_source=x');
+    assert.equal(await res.text(), 'https://jd.com/10001058.html');
+});
+
+test('evil-bilibili.com 不被误认为 bilibili', async () => {
+    const res = await callWorker('https://evil-bilibili.com/video/BV1?share_source=x');
+    assert.equal(await res.text(), 'https://evil-bilibili.com/video/BV1?share_source=x');
 });
