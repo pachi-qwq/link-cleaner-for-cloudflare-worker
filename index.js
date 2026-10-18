@@ -1,17 +1,11 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run "npm run dev" in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run "npm run deploy" to publish your worker
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
+// ========== 1. CONFIG：常量、站点规则表、限额 ==========
+// 单文件约束：本文件是唯一源码，也是唯一部署产物。不要拆模块、不要 import、不要构建步骤。
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
 
 const COMMON_FETCH_PARAMS = {method: 'HEAD', timeout: 20000}
 
+// ========== 2. UTILS：纯函数工具 ==========
 const parseUrls = (inputText) => {
     let urls = [];
     let match;
@@ -36,6 +30,7 @@ const getUrlParams = (url) => {
     return url.split(`${origin}?target=`)[1]
 }
 
+// ========== 3. HANDLERS：单站点处理 ==========
 const biliUri = async (url) => {
     let uri = url;
     const httpsIndex = uri.indexOf("https");
@@ -157,6 +152,7 @@ const xiaohongshuUri = async (url) => {
     return "";
 }
 
+// ========== 4. ROUTER：host → handler ==========
 const URL_PROCESS0R = new Map();
 URL_PROCESS0R.set('yangkeduo.com', pddGoodsUri);
 URL_PROCESS0R.set('mobile.yangkeduo.com', pddGoodsUri);
@@ -196,6 +192,7 @@ const process = async (url) => {
     return target.replace(URL_REGEX, () => (processedUrls.shift()));
 }
 
+// ========== 5. ENTRY：export default { fetch } ==========
 export default {
     async fetch({url}, env, ctx) {
         const res = await process(url);

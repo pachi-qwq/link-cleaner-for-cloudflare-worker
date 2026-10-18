@@ -1,0 +1,17 @@
+{
+  "name": "link-cleaner-for-cloudflare-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "URL 清洗 Worker：输入分享文本，输出去掉追踪参数的链接",
+  "license": "MIT",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test",
+    "check": "wrangler deploy --dry-run --outdir=.wrangler-dry"
+  },
+  "devDependencies": {
+    "wrangler": "^4.151.1"
+  }
+}
