@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Runtime](https://img.shields.io/badge/runtime-Cloudflare%20Workers-orange.svg)](https://workers.cloudflare.com/)
-[![Tests](https://img.shields.io/badge/tests-78%20passing-brightgreen.svg)](test/)
+[![Tests](https://img.shields.io/badge/tests-105%20passing-brightgreen.svg)](test/)
 [![Build](https://img.shields.io/badge/build-none-lightgrey.svg)](#single-file-constraint)
 
 A Cloudflare Worker that scrubs tracking parameters from shared links. Paste a share text, get the
@@ -173,6 +173,7 @@ Host matching is exact-or-dot-boundary suffix: `www.`, `item.`, `m.`, `v.`, `e.`
 | JD | `jd.com` | `jd.com` / `item.jd.com` / `item.m.jd.com` drop the whole query; other hosts (`search.`, `list.`) only lose tracking keys |
 | Douyin | `douyin.com`, `iesdouyin.com` | Expanded to `www.douyin.com/video/<id>` |
 | Xiaohongshu | `xiaohongshu.com`, `xhslink.com` | Short link expanded; query **keeps only** `xsec_token` (without it WeChat cannot open the note) |
+| Curated long tail | 27 sites (Weibo / Sohu / Youku / TikTok / YouTube / X / Reddit / Amazon / eBay / Google ...) | Per-site rules from ClearURLs data, see [NOTICE](NOTICE) |
 | Everything else | any | Known tracking keys removed, everything else kept |
 
 ### Tracking keys removed by the generic pass
@@ -236,7 +237,7 @@ These cost real debugging time during the port — recorded so nobody rediscover
 ## Testing
 
 ```bash
-npm test               # 78 (46 unit + 32 integration)
+npm test               # 105 (64 unit + 41 integration)
 npm run test:unit      # pure-function unit tests only
 npm run test:integration
 npm run test:coverage  # Node's built-in coverage (index.js: 91% lines / 86% branches / 100% funcs)
@@ -250,14 +251,14 @@ Two layers:
 
 | Layer | Location | What it covers | Count |
 |---|---|---|---|
-| Unit | `test/unit/` | Pure-function boundaries: `parseUrls` / `stripQuery` / `stripTracking` / `keepForHost` / `readTarget` / `safeDecode` / `mapLimit` / `matchRule` / `cleanOne` | 46 |
-| Integration | `test/integration/` | The full contract through `new Request(...)`: routing, short-link expansion (incl. the `HEAD→GET` fallback), failure isolation, limits, encoding/decoding, status codes, headers | 32 |
+| Unit | `test/unit/` | Pure-function boundaries: `parseUrls` / `stripQuery` / `stripTracking` / `keepForHost` / `readTarget` / `safeDecode` / `mapLimit` / `matchRule` / `cleanOne` | 64 |
+| Integration | `test/integration/` | The full contract through `new Request(...)`: routing, short-link expansion (incl. the `HEAD→GET` fallback), failure isolation, limits, encoding/decoding, status codes, headers | 41 |
 
 To enable this, `index.js` ends with a group of **named exports** (`export { parseUrls, … }`) used only
 by tests. Workers only care about `export default`, so the named exports do not affect the deployed
 artifact — unit-testing pure functions without breaking the single-file constraint.
 
-Coverage is tracked, not enforced. `index.js` currently sits at 91.3% lines, 85.8% branches, 100%
+Coverage is tracked, not enforced. `index.js` currently sits at 93.7% lines, 87.0% branches, 100%
 functions. Known-uncoverable branches: real network failures in `probeFinalUrl`, the landing-page
 fallback in `taobaoCnUri`, and the entry point's 500 catch-all.
 
@@ -265,10 +266,10 @@ fallback in `taobaoCnUri`, and the entry point's 500 catch-all.
 
 ```
 .
-├── index.js            # the only source file and the only deployable artifact (325 lines, 5 sections)
+├── index.js            # the only source file and the only deployable artifact (555 lines, 5 sections)
 ├── test/
-│   ├── unit/           # pure-function unit tests (46)
-│   └── integration/    # entry-level integration tests (32)
+│   ├── unit/           # pure-function unit tests (64)
+│   └── integration/    # entry-level integration tests (41)
 ├── test-support/       # shared helpers and real share-text fixtures (not test files)
 ├── package.json        # wrangler as the only devDependency
 ├── wrangler.toml       # main = index.js, bundling only, no transforms
@@ -294,7 +295,7 @@ no build step**. Internally it is organised by five section comments:
 
 This is a deliberate trade-off: a longer file beats a build pipeline, because it must stay
 paste-and-run in the Cloudflare dashboard editor. `package.json` / `wrangler.toml` / `test/` are
-development-time assets that never reach the bundle (9.2 KiB total, 3.1 KiB gzipped).
+development-time assets that never reach the bundle (18.7 KiB total, 5.7 KiB gzipped - 7.3 KB of that is the ClearURLs ruleset).
 
 ## Known limitations
 
@@ -328,7 +329,7 @@ Two upstream changes were borrowed: `ddb8d86` (Xiaohongshu `xsec_token`) and `51
 - [x] Short-link expansion (`resp.url` + `HEAD→GET` fallback), timeouts, concurrency caps
 - [x] HTTP status codes and response headers
 - [x] Pure-function unit tests alongside integration tests (named exports + `test-support/`)
-- [ ] Optional: adopt the [ClearURLs Rules](https://github.com/ClearURLs/Rules) ruleset (~40k rules)
+- [x] Optional: a **curated subset** of the ClearURLs ruleset (27 sites, see [NOTICE](NOTICE)); the full 154 providers are out of scope
 - [ ] Optional: `/clean?url=` JSON endpoint for scripting
 
 ## Contributing
@@ -347,3 +348,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) (Chinese). Summary:
 Derived from [hellodk34/link-cleaner](https://github.com/hellodk34/link-cleaner)
 (Copyright (c) 2022 hellodk34, MIT). Thanks to the original author for the research on share-link
 privacy.
+
+The embedded per-site rules **data** (`CLEARURLS_PROVIDERS`, 27 providers) comes from ClearURLs Rules
+and is used and distributed under **LGPL-3.0**, not MIT; no ClearURLs source code is used here.
+See [NOTICE](NOTICE).

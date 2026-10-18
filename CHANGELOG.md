@@ -7,6 +7,11 @@
 
 ### 新增
 
+- **内联 27 个高频站点的追踪参数规则**（ClearURLs Rules 精选：微博 / 搜狐 / 优酷 / TikTok /
+  YouTube / X / Reddit / Amazon / eBay / Google 等）。命中 provider 时按它的 `rules` 删参数，
+  并**叠加**本项目自己的追踪键黑名单；未命中 provider 仍走原黑名单。数据取自上游 JSON 快照
+  （2026-10-18），按 LGPL-3.0 使用，见新增的 `NOTICE`。单文件 325 → 555 行，
+  打包体积 9.2 → 18.7 KiB（gzip 3.1 → 5.7）。
 - **`/clean?url=` 单链接 JSON 接口**：返回 `input` / `output` / `host` / `rule` / `changed`，
   缺参、非法 URL、非 http(s) 分别返回 400 并带 `error` 码。与文本接口共用 `cleanOne`，
   并有专门用例保证「两条接口对同一链接输出一致」。实现上把 `readTarget` 泛化成 `readParam`。

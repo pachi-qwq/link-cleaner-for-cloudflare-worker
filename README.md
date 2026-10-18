@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Runtime](https://img.shields.io/badge/runtime-Cloudflare%20Workers-orange.svg)](https://workers.cloudflare.com/)
-[![Tests](https://img.shields.io/badge/tests-78%20passing-brightgreen.svg)](test/)
+[![Tests](https://img.shields.io/badge/tests-105%20passing-brightgreen.svg)](test/)
 [![Build](https://img.shields.io/badge/build-none-lightgrey.svg)](#单文件约束)
 
 把带追踪参数的分享链接清洗成干净链接的 Cloudflare Worker。粘贴一段分享文本，拿回同样的文本——
@@ -164,6 +164,7 @@ curl -s "https://link-cleaner.<你的子域>.workers.dev/clean?url=https%3A%2F%2
 | 京东 | `jd.com` | `jd.com` / `item.jd.com` / `item.m.jd.com` 删掉全部 query；其它子域（`search.`、`list.`）只删追踪键 |
 | 抖音 | `douyin.com`、`iesdouyin.com` | 解析为 `www.douyin.com/video/<id>` |
 | 小红书 | `xiaohongshu.com`、`xhslink.com` | 短链解析为笔记页；query **只保留** `xsec_token`（缺它微信里打不开） |
+| 精选长尾站点 | 27 个（微博 / 搜狐 / 优酷 / TikTok / YouTube / X / Reddit / Amazon / eBay / Google 等） | 按站点自己的规则删参数（ClearURLs 数据，见 [NOTICE](NOTICE)） |
 | 其它站点 | 任意 | 删掉已知追踪键，其余全部保留 |
 
 ### 通用层删掉的追踪键
@@ -225,7 +226,7 @@ curl -s "https://link-cleaner.<你的子域>.workers.dev/clean?url=https%3A%2F%2
 ## 测试
 
 ```bash
-npm test               # 78 条（纯函数单测 46 + 入口集成 32）
+npm test               # 105 条（纯函数单测 64 + 入口集成 41）
 npm run test:unit      # 只跑纯函数单测
 npm run test:integration
 npm run test:coverage  # Node 内置覆盖率（当前 index.js 行 91% / 分支 86% / 函数 100%）
@@ -239,23 +240,23 @@ npm run check          # wrangler 打包校验
 
 | 层 | 位置 | 测什么 | 数量 |
 |---|---|---|---|
-| 单测 | `test/unit/` | 纯函数边界：`parseUrls` / `stripQuery` / `stripTracking` / `keepForHost` / `readTarget` / `safeDecode` / `mapLimit` / `matchRule` / `cleanOne` | 46 |
-| 集成 | `test/integration/` | 走 `new Request(...)` 的完整契约：路由命中、短链展开（含 `HEAD→GET` 降级）、失败降级、并发与条数上限、编码/解码/错误码/响应头 | 32 |
+| 单测 | `test/unit/` | 纯函数边界：`parseUrls` / `stripQuery` / `stripTracking` / `keepForHost` / `readTarget` / `safeDecode` / `mapLimit` / `matchRule` / `cleanOne` | 64 |
+| 集成 | `test/integration/` | 走 `new Request(...)` 的完整契约：路由命中、短链展开（含 `HEAD→GET` 降级）、失败降级、并发与条数上限、编码/解码/错误码/响应头 | 41 |
 
 为此 `index.js` 末尾有一组**命名导出**（`export { parseUrls, … }`），只给测试用；Worker 只认
 `export default`，命名导出不影响部署产物。纯函数能单测，同时不违反单文件约束。
 
-覆盖率不设硬阈值，只做趋势观察。当前 `index.js`：行 91.3%、分支 85.8%、函数 100%。
+覆盖率不设硬阈值，只做趋势观察。当前 `index.js`：行 93.7%、分支 87.0%、函数 100%。
 已知无法覆盖的分支：`probeFinalUrl` 的真实网络失败、`taobaoCnUri` 的落地页兜底、入口的 500 兜底。
 
 ## 项目结构
 
 ```
 .
-├── index.js            # 唯一源码 + 唯一部署产物（325 行，5 个分节）
+├── index.js            # 唯一源码 + 唯一部署产物（555 行，5 个分节）
 ├── test/
-│   ├── unit/           # 纯函数单测（46 条）
-│   └── integration/    # 入口集成测试（32 条）
+│   ├── unit/           # 纯函数单测（64 条）
+│   └── integration/    # 入口集成测试（41 条）
 ├── test-support/       # 测试公共件与真实分享文本样例（不是测试文件）
 ├── package.json        # 只依赖 wrangler（devDependency）
 ├── wrangler.toml       # main = index.js，只打包不转换
@@ -281,7 +282,7 @@ npm run check          # wrangler 打包校验
 
 这是刻意的取舍：宁可让文件长一点，也不要为了"分层"引入打包步骤——它需要能在 Cloudflare
 在线编辑器里整段粘贴就能跑。`package.json` / `wrangler.toml` / `test/` 都是开发期资产，
-不进部署产物（打包体积 9.2 KiB / gzip 3.1 KiB）。
+不进部署产物（打包体积 18.7 KiB / gzip 5.7 KiB，其中 7.3 KB 是 ClearURLs 规则数据）。
 
 ## 已知限制与取舍
 
@@ -312,7 +313,7 @@ npm run check          # wrangler 打包校验
 - [x] 短链展开（`resp.url` + `HEAD→GET` 降级）、超时、并发上限
 - [x] HTTP 错误码与响应头
 - [x] 纯函数单测 + 集成测试双层（命名导出 + `test-support/`）
-- [ ] 可选：接 [ClearURLs Rules](https://github.com/ClearURLs/Rules) 的规则表（4 万条）
+- [x] 可选：接 ClearURLs 规则的**精选版**（27 个站点，见 [NOTICE](NOTICE)）；全量 154 个 provider 不做
 - [ ] 可选：`/clean?url=` 单链接 JSON 接口（给脚本用）
 
 ## 贡献
@@ -330,3 +331,6 @@ npm run check          # wrangler 打包校验
 
 衍生自 [hellodk34/link-cleaner](https://github.com/hellodk34/link-cleaner)
 （Copyright (c) 2022 hellodk34, MIT）。感谢原作者对分享链接隐私问题的整理与分析。
+
+内嵌的 27 个站点规则**数据**（`CLEARURLS_PROVIDERS`）来自 ClearURLs Rules，按其 **LGPL-3.0**
+使用与分发，不适用本项目的 MIT 许可；本项目未使用其源代码。详见 [NOTICE](NOTICE)。
