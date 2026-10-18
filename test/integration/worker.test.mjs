@@ -2,28 +2,8 @@
 // 跑法：node --test（不带参数，Node 会自动发现 test/*.test.mjs）
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import worker from '../index.js';
-
-// 契约：target 按标准做百分号编码（006 之后）。所有用例都走这个入口。
-const callWorker = async (text) =>
-    worker.fetch(new Request('https://w.dev/?target=' + encodeURIComponent(text)), {}, {});
-
-// 兼容性入口：原始未编码文本（老用户的书签长这样，内部 & 不能被截断）
-const callRaw = async (raw) =>
-    worker.fetch(new Request('https://w.dev/?target=' + raw), {}, {});
-
-// 替换全局 fetch，返回调用记录与恢复函数。
-// CF 语义建模：follow 之后 headers 里没有 Location，最终地址只能从 .url 读。
-const stubFetch = (map, body = '') => {
-    const prev = globalThis.fetch;
-    const calls = [];
-    globalThis.fetch = async (url, init) => {
-        calls.push({ url: String(url), method: (init && init.method) || 'GET' });
-        const dest = map[String(url)] || String(url);
-        return { url: dest, status: 200, headers: { get: () => null }, text: async () => body };
-    };
-    return { calls, restore: () => { globalThis.fetch = prev; } };
-};
+import worker from '../../index.js';
+import { callWorker, callRaw, stubFetch } from '../../test-support/helpers.mjs';
 
 test('b23 短链解析（唯一当前可用路径，作为回归锚点）', async (t) => {
     const stub = stubFetch({ 'https://b23.tv/GUOxxxx': 'https://www.bilibili.com/video/BV1M4411q7W8?share_source=copy' });
@@ -234,4 +214,16 @@ test('响应头：text/plain + CORS + no-store', async () => {
     assert.match(res.headers.get('content-type'), /text\/plain/);
     assert.equal(res.headers.get('access-control-allow-origin'), '*');
     assert.equal(res.headers.get('cache-control'), 'no-store');
+});
+
+test('OPTIONS 返回 204 预检', async () => {
+    const res = await worker.fetch(new Request('https://w.dev/', { method: 'OPTIONS' }), {}, {});
+    assert.equal(res.status, 204);
+    assert.equal(res.headers.get('access-control-allow-origin'), '*');
+});
+
+test('HEAD 放行并正常处理', async () => {
+    const url = 'https://w.dev/?target=' + encodeURIComponent('https://item.jd.com/1.html');
+    const res = await worker.fetch(new Request(url, { method: 'HEAD' }), {}, {});
+    assert.equal(res.status, 200);
 });

@@ -9,6 +9,9 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "test": "node --test",
+    "test:unit": "node --test \"test/unit/*.test.mjs\"",
+    "test:integration": "node --test \"test/integration/*.test.mjs\"",
+    "test:coverage": "node --test --experimental-test-coverage",
     "check": "wrangler deploy --dry-run --outdir=.wrangler-dry"
   },
   "devDependencies": {
