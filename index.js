@@ -205,7 +205,17 @@ const taobaoCnUri = async (url) => {
 // 拼多多：必需参数是 goods_id
 const pddGoodsUri = async (url) => stripQuery(url, keepForHost(hostOf(url)));
 
-const jdUri = async (url) => removeParams(url);
+// 京东：只有商品/详情页可以「全删 query」。搜索页、列表页的 keyword/ev 之类是业务参数，
+// 一刀切会把 search.jd.com/Search?keyword=键盘 砍成死链，所以其它子域走通用黑名单。
+const JD_SKU_HOSTS = new Set(['jd.com', 'item.jd.com', 'item.m.jd.com']);
+
+const jdUri = async (url) => {
+    const host = hostOf(url);
+    if (JD_SKU_HOSTS.has(host)) {
+        return removeParams(url);
+    }
+    return stripTracking(url);
+};
 
 const douyinUri = async (url) => {
     const finalUrl = await probeFinalUrl(url);

@@ -90,6 +90,11 @@ test('京东删掉全部 query，路径不动', async () => {
     assert.equal(await res.text(), 'https://item.jd.com/10001058.html');
 });
 
+test('京东搜索页不能全删：keyword 是业务参数（回归锚点）', async () => {
+    const res = await callWorker('https://search.jd.com/Search?keyword=%E9%94%AE%E7%9B%98&enc=utf-8&spm=a1');
+    assert.equal(await res.text(), 'https://search.jd.com/Search?keyword=%E9%94%AE%E7%9B%98&enc=utf-8');
+});
+
 test('B站业务参数 p / t 必须保留', async () => {
     const res = await callWorker('https://www.bilibili.com/video/BV1x?p=2&t=30&share_source=copy');
     assert.equal(await res.text(), 'https://www.bilibili.com/video/BV1x?p=2&t=30');
