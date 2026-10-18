@@ -14,6 +14,20 @@ export const SHARE_TEXTS = {
     percent: '全场 50% off https://item.jd.com/1.html?utm_source=a',
 };
 
+// ClearURLs 精选规则的期望输出（来源：上游 rules 逐条核对，见 plans/009）
+export const CLEARURLS_CASES = [
+    ['https://weibo.com/1234/abcd?weibo_id=1&dt_dapp=1&from=page', 'https://weibo.com/1234/abcd?from=page'],
+    ['https://www.youtube.com/watch?v=abc&gclid=1&feature=share&si=xyz', 'https://www.youtube.com/watch?v=abc'],
+    ['https://www.instagram.com/p/ABC/?igshid=xyz', 'https://www.instagram.com/p/ABC/'],
+    ['https://www.sohu.com/a/1_2?pvid=abc&scm=1', 'https://www.sohu.com/a/1_2'],
+    ['https://v.youku.com/v_show/id_X.html?tpa=1', 'https://v.youku.com/v_show/id_X.html'],
+    ['https://www.tiktok.com/@u/video/1?u_code=abc&_d=1', 'https://www.tiktok.com/@u/video/1'],
+    ['https://www.ebay.com/itm/1?_trkparms=x&_trksid=y', 'https://www.ebay.com/itm/1'],
+    ['https://www.aliexpress.com/item/1.html?ws_ab_test=1&btsid=2', 'https://www.aliexpress.com/item/1.html'],
+    ['https://github.com/u/r?email_token=abc', 'https://github.com/u/r'],
+    ['https://medium.com/@u/post?source=email-abc', 'https://medium.com/@u/post'],
+];
+
 // 短链解析桩：key 是请求的短链，value 是 302 之后的最终地址
 export const REDIRECTS = {
     'https://b23.tv/BV1M4411q7W8': 'https://www.bilibili.com/video/BV1M4411q7W8?share_source=copy',
